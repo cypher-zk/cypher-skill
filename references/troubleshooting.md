@@ -103,11 +103,12 @@ webpack: (config) => {
 | 6029 | `ComputationVerificationFailed` | Arcium callback failed | Not recoverable — report tx sig |
 | 6033 | `WrongMint` | User's ATA is wrong mint | Read mint from `GlobalState.acceptedMint` |
 | 6036 | `InvalidChallengePeriod` | `challengePeriod` outside 24h–48h | Use `MIN_CHALLENGE_PERIOD_SECS` ≤ value ≤ `MAX_CHALLENGE_PERIOD_SECS` |
-| 6037 | `NotPendingResolution` | flag / finalize / override called on wrong state | Only call while `market.state === PendingResolution` (4) |
-| 6038 | `ChallengePeriodNotElapsed` | finalize called too early | Wait until `now > market.challengeDeadline` |
-| 6039 | `ChallengePeriodElapsed` | flag called after the window closed | Window closed — no further flags accepted |
-| 6040 | `MarketDisputed` | finalize called on a flagged market | Admin must call `adminOverrideResolution` first |
-| 6041 | `MarketNotDisputed` | admin override called on a non-disputed market | Only valid when `market.disputed === true` |
+| 6037 | `BondTooSmall` | `bondAmount < MIN_CREATOR_BOND` ($20 USDC) | Pass `bondAmount >= 20_000_000n`; no upper bound |
+| 6038 | `NotPendingResolution` | flag / finalize / override called on wrong state | Only call while `market.state === PendingResolution` (4) |
+| 6039 | `ChallengePeriodNotElapsed` | finalize called too early | Wait until `now > market.challengeDeadline` |
+| 6040 | `ChallengePeriodElapsed` | flag called after the window closed | Window closed — no further flags accepted |
+| 6041 | `MarketDisputed` | finalize called on a flagged market | Admin must call `adminOverrideResolution` first |
+| 6042 | `MarketNotDisputed` | admin override called on a non-disputed market | Only valid when `market.disputed === true` |
 
 Use `parseCypherError(err)` to extract the code; full list in `CypherErrorCode` enum.
 

@@ -42,7 +42,7 @@ Construction is synchronous, no RPC fires. Holds:
 | `ClusterConfig` | type | `{ name, rpc, arciumClusterOffset, expectedMint }` |
 | `ACCOUNT_DISCRIMINATOR_SIZE` | const | `8` |
 | `MIN_BET_USDC` | const | `1_000_000n` ($1 USDC) |
-| `CREATOR_BOND` | const | `10_000_000n` ($10 USDC) |
+| `MIN_CREATOR_BOND` | const | `20_000_000n` ($20 USDC — minimum, no upper bound) (v0.2+) |
 | `DEFAULT_RESOLUTION_WINDOW_SECS` | const | `7 * 24 * 3600` |
 | `DEFAULT_CLAIM_PERIOD_SECS` | const | `14 * 24 * 3600` |
 | `DEFAULT_REFUND_PERIOD_SECS` | const | `14 * 24 * 3600` |
@@ -127,8 +127,8 @@ const { protocolFee, lpFee, netAmount } = computeFees(5_000_000n, {
 
 | Export | Kind |
 | --- | --- |
-| `CypherErrorCode` | const enum of 36 codes (6000–6035) |
-| `CypherErrorName` | union of 36 string names |
+| `CypherErrorCode` | const enum of 43 codes (6000–6042) |
+| `CypherErrorName` | union of 43 string names |
 | `CypherErrorCodeValue` | union of the numeric codes |
 | `CYPHER_ERROR_MESSAGES` | `Record<CypherErrorName, string>` |
 | `cypherErrorName(code)` | `(number) => CypherErrorName \| undefined` |
@@ -228,8 +228,8 @@ unless you need to compose/simulate/bundle.
 - `INIT_COMP_DEF_INSTRUCTIONS` — map of 8 method names → circuit names
 
 ### Market lifecycle
-- `createMarketIx(client, { creator, acceptedMint, question, closeTime, category, expectedMarketId })`
-- `createMarketMultiIx(client, { ...above, numOutcomes })`
+- `createMarketIx(client, { creator, acceptedMint, question, closeTime, category, expectedMarketId, challengePeriod, bondAmount })`
+- `createMarketMultiIx(client, { ...above, numOutcomes })` — `bondAmount >= MIN_CREATOR_BOND` ($20 USDC, no upper bound)
 - `cancelMarketIx(client, { creator, marketId, acceptedMint })`
 - `withdrawCreatorFundsIx(client, { creator, marketId, acceptedMint })`
 
