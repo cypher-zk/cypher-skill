@@ -56,6 +56,43 @@ ArciumSignerAccount (PDA ["ArciumSignerAccount"]) — queue/callback CPI authori
 
 Guarantee: **your chosen side stays secret**. Stake amount IS public.
 
+## Resolution flow (v0.2+)
+
+```
+Resolver calls resolveMarket
+       │
+       ▼
+  reveal_market_outcome_* (Arcium MPC)
+       │
+       ▼  callback writes:
+         m.outcome, m.revealedPool*, m.payoutRatio
+         m.state = PendingResolution (4)        ← NOT Resolved
+         m.challengeDeadline = now + challenge_period
+
+  ┌─────────────────────────────────────┐
+  │  Challenge window (24h-48h)         │
+  │                                     │
+  │  Anyone may flagResolution          │
+  │    → market.disputed = true         │
+  │                                     │
+  └─────────────────────────────────────┘
+       │                          │
+   (undisputed)               (disputed)
+       │                          │
+       ▼                          ▼
+  finalizeResolution      adminOverrideResolution
+  (anyone, after window)  (admin only, any time)
+       │                          │
+       ▼                          ▼
+  m.state = Resolved        m.state = Resolved
+  m.claimDeadline =         m.payout_ratio recomputed
+  m.refundDeadline =        from plaintext pools
+
+       │
+       ▼
+  claimPayout / claimRefund now open
+```
+
 ## Bet flow (with progress stages)
 
 ```

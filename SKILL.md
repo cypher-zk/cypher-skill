@@ -16,7 +16,7 @@ description: >
 license: MIT
 metadata:
   author: cypher-zk
-  version: "0.1.1"
+  version: "0.2.0"
   sdk_package: "@cypher-zk/sdk"
   sdk_repo: "https://github.com/cypher-zk/cypher-sdk"
   contract_program_id: "cyphPe923pnPGVXJL3a3P7t2W9mJsagBcg1oeauoh2B"
@@ -76,6 +76,8 @@ should read before writing code.
 | Persist the user's x25519 secret | [frontend/SKILL.md → "Persisting user secrets"](frontend/SKILL.md#persisting-user-secrets) |
 | Create / cancel / resolve / claim flows in React | [frontend/SKILL.md → "Hooks reference"](frontend/SKILL.md#hooks-reference) |
 | Subscribe to live events (WebSocket or poll) | [frontend/SKILL.md → "Live events"](frontend/SKILL.md#live-events) |
+| **v0.2+: dispute window UI (flag / finalize / admin override)** | [frontend/examples/dispute-window.md](frontend/examples/dispute-window.md) |
+| **v0.2+: resolver bot that finalizes after the window** | [backend/examples/oracle-resolver.md](backend/examples/oracle-resolver.md) |
 | Initialize the protocol (`initialize` + 8 × initCompDef) | [backend/SKILL.md → "Bootstrap a deployment"](backend/SKILL.md#bootstrap-a-deployment) |
 | Run a Node script that uses a Keypair | [backend/SKILL.md → "Keypair signers"](backend/SKILL.md#keypair-signers) |
 | Build an off-chain indexer | [backend/SKILL.md → "Event indexer pattern"](backend/SKILL.md#event-indexer-pattern) |
@@ -116,10 +118,22 @@ The agent has a measurable habit of inventing these — **do not**:
 - **NEVER** put the `node`-only subpath (`@cypher-zk/sdk/node`) in
   browser bundles. It depends on `node:fs` for circuit-bytecode upload
   and is admin-only.
-- **NEVER** invent instruction names. The set is exactly 26: 3 admin,
-  8 init comp def, 4 market lifecycle, 2 bet, 2 resolve, 4 claim, 3
-  callbacks (program-internal). Source of truth:
-  `src/idl/cypher.json`.
+- **NEVER** invent instruction names. v0.2+: the user-facing set is 29 —
+  3 admin, 8 init comp def, 4 market lifecycle, 2 bet, 2 resolve,
+  4 claim, **3 dispute (`flag_resolution`, `finalize_resolution`,
+  `admin_override_resolution`)**, plus 3 program-internal callbacks.
+  Source of truth: `src/idl/cypher.json`.
+- **NEVER** (v0.2+) call `claimPayout` while `market.state ===
+  PendingResolution` (state value 4). Reveal callbacks now flip the
+  market to `PendingResolution`, not `Resolved`. Claim doesn't open
+  until someone calls `finalizeResolution` (anyone, after the challenge
+  window) or `adminOverrideResolution` (admin, on disputed). The SDK
+  action throws a clear pre-flight error — surface it in your UI.
+- **NEVER** (v0.2+) omit `challengePeriod` when calling
+  `createMarketIx` / `createMarketMultiIx` directly. The high-level
+  `client.actions.createMarket(...)` defaults to
+  `MIN_CHALLENGE_PERIOD_SECS` (24h), but the raw builders REQUIRE it.
+  Allowed range: 24h–48h. Out-of-range throws client-side.
 
 ## Core mental model
 

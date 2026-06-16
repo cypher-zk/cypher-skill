@@ -168,6 +168,32 @@
         "Names the offending files (mutations.ts, useMarketEvents.ts, etc.)",
         "Does NOT suggest reconfiguring Rollup output.manualChunks"
       ]
+    },
+    {
+      "id": 15,
+      "name": "v0.2-pending-resolution-claim",
+      "prompt": "User's claimPayout is failing with 'NotResolved' even though the resolve transaction landed and the outcome looks correct. Reading market.state returns 4.",
+      "expected_output": "Diagnoses PendingResolution (v0.2 challenge window); tells the user to call finalizeResolution (or wait for someone to) before claims open.",
+      "expectations": [
+        "Identifies state=4 as PendingResolution, not Resolved",
+        "Explains the v0.2 challenge window: reveal callback no longer marks Resolved",
+        "Recommends client.actions.finalizeResolution (permissionless) once market.challengeDeadline has passed",
+        "Mentions adminOverrideResolution as the path when market.disputed === true",
+        "Recommends marketPhase(market) === 'claimable' as the UI gate"
+      ]
+    },
+    {
+      "id": 16,
+      "name": "v0.2-flag-resolution-ui",
+      "prompt": "How do I let any user flag a wrong resolution during the challenge window?",
+      "expected_output": "Walks through useFlagResolution + the marketPhase gate; mentions admin override path on disputed.",
+      "expectations": [
+        "Uses useFlagResolution from @cypher-zk/sdk/react",
+        "Gates the Flag button on marketPhase(market) === 'pendingResolution'",
+        "Mentions that flagging blocks finalizeResolution until adminOverrideResolution runs",
+        "Notes the challenge_period is configurable per market in [24h, 48h]",
+        "Surfaces market.challengeDeadline as the countdown anchor"
+      ]
     }
   ]
 }

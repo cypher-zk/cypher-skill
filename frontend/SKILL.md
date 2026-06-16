@@ -10,7 +10,7 @@ description: >
   contract changes, raw circuit work.
 metadata:
   parent_skill: cypher
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # Cypher SDK — Frontend
@@ -274,6 +274,9 @@ keys on success.
 | `useClaimPayout()` | `UseMutationResult<ClaimResult, ...>` | market + positions |
 | `useClaimRefund()` | `UseMutationResult<ClaimResult, ...>` | market + positions |
 | `useCancelMarket()` | `UseMutationResult<{signature, market}, ...>` | market + `marketKeys.all` |
+| `useFlagResolution()` (v0.2+) | `UseMutationResult<ResolutionActionResult, ...>` | `marketKeys.one(marketId)` |
+| `useFinalizeResolution()` (v0.2+) | `UseMutationResult<ResolutionActionResult, ...>` | `marketKeys.one(marketId)` |
+| `useAdminOverrideResolution()` (v0.2+) | `UseMutationResult<ResolutionActionResult, ...>` | `marketKeys.one(marketId)` |
 | `useMarketEvents(opts?)` | `CypherEvent[]` (live) | — |
 
 Query-key factories you can hand to `queryClient.invalidateQueries()`
@@ -336,10 +339,13 @@ import { marketPhase } from "@cypher-zk/sdk";
 const phase = marketPhase(market);
 // "betting" | "awaitingResolve" | "claimable" | "refundable" | "expired" | "cancelled"
 
-const canBet    = phase === "betting";
-const canResolve = phase === "awaitingResolve";
-const canClaim  = phase === "claimable";  // only after a Resolved market
-const canRefund = phase === "refundable"; // unresolved past resolution_deadline
+const canBet           = phase === "betting";
+const canResolve       = phase === "awaitingResolve";
+const canFlag          = phase === "pendingResolution"; // v0.2+: anyone, during window
+const canFinalize      = phase === "awaitingFinalize";  // v0.2+: anyone, window elapsed undisputed
+const canAdminOverride = phase === "disputed";          // v0.2+: admin only
+const canClaim         = phase === "claimable";         // only after a finalized market
+const canRefund        = phase === "refundable";        // unresolved past resolution_deadline
 ```
 
 ## Recipes

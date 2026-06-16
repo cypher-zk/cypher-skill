@@ -107,6 +107,33 @@ pubkey as resolver and skip this bot.
 - The bot uses `marketPhase(account) === "awaitingResolve"` as the
   client-side gate; the contract enforces it again on-chain.
 
+## v0.2+: finalize after the challenge window
+
+After `client.actions.resolveMarket(...)` returns, the market is in
+`PendingResolution` — NOT `Resolved`. The position can't be claimed
+yet. Either schedule a `finalizeResolution` call ~5 minutes after
+`market.challengeDeadline` (anyone can call it), or leave it to
+bettors / a separate finalizer bot.
+
+```ts
+import { marketPhase } from "@cypher-zk/sdk";
+
+setInterval(async () => {
+  const markets = await client.markets.byState(/* PendingResolution */ 4);
+  for (const { account } of markets) {
+    if (marketPhase(account) !== "awaitingFinalize") continue;
+    try {
+      await client.actions.finalizeResolution({
+        caller: resolver.publicKey,
+        marketId: account.marketId,
+      });
+    } catch {
+      // disputed → MarketDisputed (6040); skip — admin must override
+    }
+  }
+}, 5 * 60_000);
+```
+
 ## Operational notes
 
 - **SOL for fees**: keep the resolver wallet topped up — each resolve

@@ -102,6 +102,12 @@ webpack: (config) => {
 | 6027 | `RefundPeriodExpired` | Past refund deadline | Position forfeited |
 | 6029 | `ComputationVerificationFailed` | Arcium callback failed | Not recoverable — report tx sig |
 | 6033 | `WrongMint` | User's ATA is wrong mint | Read mint from `GlobalState.acceptedMint` |
+| 6036 | `InvalidChallengePeriod` | `challengePeriod` outside 24h–48h | Use `MIN_CHALLENGE_PERIOD_SECS` ≤ value ≤ `MAX_CHALLENGE_PERIOD_SECS` |
+| 6037 | `NotPendingResolution` | flag / finalize / override called on wrong state | Only call while `market.state === PendingResolution` (4) |
+| 6038 | `ChallengePeriodNotElapsed` | finalize called too early | Wait until `now > market.challengeDeadline` |
+| 6039 | `ChallengePeriodElapsed` | flag called after the window closed | Window closed — no further flags accepted |
+| 6040 | `MarketDisputed` | finalize called on a flagged market | Admin must call `adminOverrideResolution` first |
+| 6041 | `MarketNotDisputed` | admin override called on a non-disputed market | Only valid when `market.disputed === true` |
 
 Use `parseCypherError(err)` to extract the code; full list in `CypherErrorCode` enum.
 
@@ -155,6 +161,22 @@ Fetches each tx individually. For high-throughput indexing, use `getSignaturesFo
 ### `placeBet` takes >30s on devnet
 
 Typical end-to-end: localnet 5–8s, devnet 15–30s. Bump `timeoutMs` if hitting 120s default.
+
+## v0.2: claimPayout rejected on a market that's clearly resolved
+
+**Symptom**: `market.state === 4` (PendingResolution) and `claimPayout`
+throws `NotResolved` or the SDK pre-flight error "call
+finalizeResolution first".
+
+**Cause**: v0.2 added a challenge window. Reveal callbacks now leave
+the market in `PendingResolution`, not `Resolved`. The market needs
+either `finalizeResolution` (anyone, after the challenge window
+elapses undisputed) or `adminOverrideResolution` (admin, on a
+disputed market) before claims open.
+
+**Fix**: gate the Claim button on `marketPhase(market) === "claimable"`.
+Show a "Finalize" button when phase is `"awaitingFinalize"` and a
+"Pending challenge window" label when phase is `"pendingResolution"`.
 
 ## When you can't diagnose
 

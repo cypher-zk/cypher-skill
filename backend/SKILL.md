@@ -10,7 +10,7 @@ description: >
   (use ../frontend/SKILL.md), contract changes to cypher-main.
 metadata:
   parent_skill: cypher
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # Cypher SDK — Backend
@@ -355,3 +355,9 @@ you've leaked this subpath in.
 - [ ] Devnet smoke scripts gate writes behind `DEVNET_KEYPAIR`.
 - [ ] Integration tests are gated by `INTEGRATION=1` (skipped by default).
 - [ ] IDL sync runs in `prepublishOnly` before any package publish.
+- [ ] **v0.2+**: every `create_market` call passes `challengePeriod`
+      (24h–48h). The high-level action defaults it; raw ix builders
+      require it.
+- [ ] **v0.2+**: resolver bots either wait `challenge_period` after
+      `resolveMarket` and call `finalizeResolution`, or rely on
+      permissionless callers / a separate finalizer bot.

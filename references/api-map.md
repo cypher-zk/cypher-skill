@@ -53,7 +53,9 @@ Construction is synchronous, no RPC fires. Holds:
 | `MAX_QUESTION_BYTES` | const | `200` |
 | `MIN_OUTCOMES_MULTI` | const | `2` |
 | `MAX_OUTCOMES_MULTI` | const | `4` |
-| `MarketState` | enum-like | `{ Active: 0, Closed: 1, Resolved: 2, Unresolved: 3 }` |
+| `MIN_CHALLENGE_PERIOD_SECS` | const | `24 * 3600` (v0.2+) |
+| `MAX_CHALLENGE_PERIOD_SECS` | const | `48 * 3600` (v0.2+) |
+| `MarketState` | enum-like | `{ Active: 0, Closed: 1, Resolved: 2, Unresolved: 3, PendingResolution: 4 }` (v0.2+ adds 4) |
 | `MarketType` | enum-like | `{ YesNo: 0, MultiOutcome: 1 }` |
 | `MarketCategory` | enum-like | `{ Crypto: 0, Politics: 1, Sports: 2, Tech: 3, Economy: 4, Culture: 5, Beyond: 6 }` |
 
@@ -113,6 +115,9 @@ const { protocolFee, lpFee, netAmount } = computeFees(5_000_000n, {
 | --- | --- | --- |
 | `"betting"` | Active + before `closeTime` | `placeBet` |
 | `"awaitingResolve"` | Active + before `resolutionDeadline` | `resolveMarket` (resolver only) |
+| `"pendingResolution"` (v0.2+) | PendingResolution + inside challenge window, not disputed | `flagResolution` (anyone) |
+| `"awaitingFinalize"` (v0.2+) | PendingResolution + window elapsed, not disputed | `finalizeResolution` (anyone) |
+| `"disputed"` (v0.2+) | PendingResolution + flagged | `adminOverrideResolution` (admin only) |
 | `"claimable"` | Resolved + before `claimDeadline` | `claimPayout` |
 | `"refundable"` | Active + past `resolutionDeadline`, before `refundDeadline` | `claimRefund` |
 | `"expired"` | All deadlines elapsed | `adminClaimRemaining` (admin only) |
@@ -242,6 +247,11 @@ unless you need to compose/simulate/bundle.
 - `claimRefundYesnoIx(client, ...)`
 - `claimRefundMultiIx(client, ...)`
 
+### Dispute / challenge window (v0.2+)
+- `flagResolutionIx(client, { flagger, marketId })` — anyone can flag during the window
+- `finalizeResolutionIx(client, { caller, marketId })` — anyone can finalize after window elapses undisputed
+- `adminOverrideResolutionIx(client, { admin, marketId, outcomeValue })` — admin re-resolves a disputed market
+
 ### `PlacePrivateBetParams` (shared between yesno/multi)
 - `payer, user: PublicKey`
 - `marketId: bigint | number`
@@ -267,6 +277,9 @@ these for end-to-end flows.
 | `resolveMarketAction(client, inputs)` | `ResolveMarketResult` |
 | `claimPayoutAction(client, inputs)` | `ClaimResult` |
 | `claimRefundAction(client, inputs)` | `ClaimResult` |
+| `flagResolutionAction(client, inputs)` (v0.2+) | `ResolutionActionResult` |
+| `finalizeResolutionAction(client, inputs)` (v0.2+) | `ResolutionActionResult` |
+| `adminOverrideResolutionAction(client, inputs)` (v0.2+) | `ResolutionActionResult` |
 | `sendIx(client, ix, opts?)` | `Promise<signature>` |
 | `sendIxAndAwaitArcium(client, ix, {computationOffset, ...})` | `Promise<{signature, computation}>` |
 
@@ -313,6 +326,9 @@ type ActionStage =
 | `CreatorWithdrawnEvent` | `market, creator, bond, lpFees, total` |
 | `PayoutClaimedEvent` | `market, user, payoutAmount` |
 | `RefundClaimedEvent` | `market, user, refundAmount` |
+| `ResolutionFlaggedEvent` (v0.2+) | `market, flaggedBy` |
+| `MarketFinalizedEvent` (v0.2+) | `market, outcome, payoutRatio` |
+| `ResolutionOverriddenEvent` (v0.2+) | `market, oldOutcome, newOutcome, newPayoutRatio, admin` |
 
 ## Client namespaces (shortcuts)
 
@@ -326,13 +342,14 @@ client instance:
 | `client.positions` | `fetch(market, user)`, `byUser(user)`, `forMarket(market)` |
 | `client.lpPositions` | `fetch(market, creator)`, `byProvider(pk)` |
 | `client.events` | `subscribeAll`, `subscribe`, `onMarketCreated`, …, `pollEvents`, `parseLogs` |
-| `client.actions` | `createMarket`, `createMarketMulti`, `cancelMarket`, `withdrawCreatorFunds`, `placeBet`, `resolveMarket`, `claimPayout`, `claimRefund` |
+| `client.actions` | `createMarket`, `createMarketMulti`, `cancelMarket`, `withdrawCreatorFunds`, `placeBet`, `resolveMarket`, `claimPayout`, `claimRefund`, `flagResolution`, `finalizeResolution`, `adminOverrideResolution` (last 3 = v0.2+) |
 | `client.admin` | `initializeIx`, `updateAcceptedMintIx`, `adminClaimRemainingIx` |
 | `client.compDefs` | `initIx(method, params)`, `buildAllInitIx(params)` |
 | `client.marketIx` | `createIx`, `createMultiIx`, `cancelIx`, `withdrawCreatorFundsIx` |
 | `client.bets` | `placeYesnoIx`, `placeMultiIx` |
 | `client.resolveIx` | `yesnoIx`, `multiIx` |
 | `client.claimIx` | `payoutYesnoIx`, `payoutMultiIx`, `refundYesnoIx`, `refundMultiIx` |
+| `client.resolutionIx` (v0.2+) | `flagIx`, `finalizeIx`, `adminOverrideIx` |
 
 ## React subpath (`@cypher-zk/sdk/react`)
 
@@ -350,6 +367,9 @@ client instance:
 | `useClaimPayout(opts?)` | mutation hook |
 | `useClaimRefund(opts?)` | mutation hook |
 | `useCancelMarket(opts?)` | mutation hook |
+| `useFlagResolution(opts?)` (v0.2+) | mutation hook |
+| `useFinalizeResolution(opts?)` (v0.2+) | mutation hook |
+| `useAdminOverrideResolution(opts?)` (v0.2+) | mutation hook |
 | `useMarketEvents(opts?)` | subscription hook (returns `CypherEvent[]`) |
 | `globalStateKeys`, `marketKeys`, `positionKeys` | query-key factories |
 | `UseMarketsFilter` | type |
