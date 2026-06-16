@@ -1,0 +1,173 @@
+{
+  "skill_name": "cypher",
+  "evals": [
+    {
+      "id": 1,
+      "name": "persist-user-secret",
+      "prompt": "I'm building a React component that calls client.actions.placeBet. What should I do with the result?",
+      "expected_output": "Identifies that result.userKeypair.privateKey must be persisted client-side, keyed by position.market, with explicit warning about non-recoverability.",
+      "expectations": [
+        "Names result.userKeypair.privateKey as the critical thing to persist",
+        "Recommends keying by position.market or a stable identifier",
+        "States there is no on-chain recovery path",
+        "Explains the consequence: without the key the user cannot decrypt their position to display amount/side later (claim still possible blindly)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "event-field-camelcase",
+      "prompt": "After subscribing to onBetPlaced, I'm trying to read data.entry_odds but it's undefined. What's wrong?",
+      "expected_output": "Identifies camelCase naming convention in SDK; data.entryOdds (not data.entry_odds).",
+      "expectations": [
+        "Identifies the field is camelCase (entryOdds) not snake_case",
+        "Notes the SDK's parseLogs normalizes Anchor's raw snake_case BN output",
+        "Mentions numeric fields are bigint not BN",
+        "Does NOT suggest the user invoke BorshCoder directly"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "phase-gating-claim",
+      "prompt": "My claimPayout button is throwing CypherError: ClaimPeriodExpired when users click it. How do I prevent this?",
+      "expected_output": "Gate UI on marketPhase being 'claimable'; mention claimRefund as alternative for refundable phase.",
+      "expectations": [
+        "Recommends marketPhase(market) === 'claimable' gate on the button",
+        "Explains the difference between 'claimable' (resolved, claim window open) and 'expired' (claim window closed)",
+        "Mentions that once expired, the position is forfeited (admin sweep eligible)",
+        "Does NOT suggest catching the error and retrying"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "cluster-agnostic-mint",
+      "prompt": "Should I import KNOWN_MINTS.devnetCSDC and pass it as acceptedMint to placeBet?",
+      "expected_output": "No. The SDK action helpers read acceptedMint from GlobalState at runtime; KNOWN_MINTS is informational only.",
+      "expectations": [
+        "Says no — never hard-code the mint",
+        "Explains action helpers fetch acceptedMint from GlobalState",
+        "Frames KNOWN_MINTS as informational/documentation only",
+        "Notes that hard-coding would silently break on mainnet"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "node-subpath-browser",
+      "prompt": "My Vite build fails with 'Module node:fs has been externalized'. I'm using @cypher-zk/sdk in a React app.",
+      "expected_output": "Diagnoses that the user imported from @cypher-zk/sdk/node in browser code; tells them to switch to the core subpath.",
+      "expectations": [
+        "Identifies @cypher-zk/sdk/node as the source of node:fs",
+        "States the /node subpath is admin-only and never for browser bundles",
+        "Suggests grepping imports for '@cypher-zk/sdk/node'",
+        "Does NOT suggest configuring Vite to polyfill node:fs"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "progress-events-loader",
+      "prompt": "How can my UI show 'Encrypting...' then 'Awaiting MPC nodes...' during placeBet?",
+      "expected_output": "Use the onProgress callback on placeBet to receive ActionProgressEvent with stage transitions.",
+      "expectations": [
+        "Names the onProgress callback as the mechanism",
+        "Lists the 7 stages or notes their order (validating → fetching-state → encrypting → submitting → awaiting-callback → refetching → done)",
+        "Notes ActionProgressEvent includes signature + computationOffset from 'submitting' onward",
+        "Shows mapping stage to a user-facing label"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "wallet-adapter-integration",
+      "prompt": "I'm using @solana/wallet-adapter-react. How do I plug it into CypherClient?",
+      "expected_output": "Pass the useWallet() result directly as the wallet option; it satisfies the SDK's Wallet interface.",
+      "expectations": [
+        "Says wallet-adapter wallets satisfy the Wallet interface as-is",
+        "Mounts CypherProvider INSIDE QueryClientProvider",
+        "Constructs the client once (useMemo) keyed on wallet.publicKey",
+        "Gates on wallet.publicKey being non-null before constructing the client"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "scope-negative-circuit-change",
+      "prompt": "I need to add a new outcome type to the place_private_bet_yesno circuit. Where do I make the change?",
+      "expected_output": "Routes the user to cypher-main (the contract repo) and the bundled arcium skill, NOT the cypher-sdk.",
+      "expectations": [
+        "Identifies circuit changes belong in cypher-main/encrypted-ixs",
+        "References the arcium skill for circuit authoring guidance",
+        "Notes the SDK only reflects the contract; circuit changes propagate via sync:idl + manual SDK updates",
+        "Does NOT suggest changing anything in @cypher-zk/sdk"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "decrypt-own-position",
+      "prompt": "I want to show the user how much they bet ($X on YES) on the markets they participated in.",
+      "expected_output": "Use decryptBetInput with the user's persisted x25519 secret; explain what's possible without the secret.",
+      "expectations": [
+        "Uses decryptBetInput from @cypher-zk/sdk with the position + cipher + nonceBytes",
+        "Derives the cipher via createCipher(persistedSecret, mxePubkey)",
+        "Converts position.nonce (u128) to bytes via bigIntToLeBytes(_, 16)",
+        "Handles the case where the user lost the secret (cannot decrypt; can still claim blindly)"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "mutation-hook-invalidation",
+      "prompt": "I'm using client.bets.placeYesnoIx directly (not the action). My useMarket() cache isn't updating after the tx. Why?",
+      "expected_output": "Raw instruction builders don't auto-invalidate; only mutation hooks do. Call queryClient.invalidateQueries manually.",
+      "expectations": [
+        "States raw builders bypass the mutation-hook auto-invalidation",
+        "Names queryClient.invalidateQueries({ queryKey: marketKeys.one(id) }) as the fix",
+        "Mentions marketKeys / positionKeys factories exported from @cypher-zk/sdk/react",
+        "Suggests usePlaceBet as the simpler path if the user doesn't need raw composition"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "comp-def-idempotent",
+      "prompt": "My bootstrap script fails when I re-run it: 'already in use' on init_place_bet_yesno_comp_def. Bug?",
+      "expected_output": "Not a bug — comp defs are persistent; the error means it's already initialized. Wrap in a try/catch that ignores 'already in use'.",
+      "expectations": [
+        "Identifies the error as expected idempotent behavior",
+        "Suggests catching 'already in use' / custom program error 0x0",
+        "Notes bootstrap is safe to re-run repeatedly",
+        "Does NOT suggest re-deploying the program or resetting the validator"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "browser-buffer-error",
+      "prompt": "Next.js App Router app: 'Buffer is not defined' when importing @cypher-zk/sdk.",
+      "expected_output": "Add a Buffer polyfill in a client component; configure webpack fallback in next.config.js.",
+      "expectations": [
+        "Recommends the Buffer polyfill (import { Buffer } from 'buffer'; window.Buffer ??= Buffer)",
+        "Places the polyfill in a 'use client' file (e.g. providers.tsx)",
+        "Adds webpack.resolve.fallback for crypto/fs/stream to next.config.js",
+        "Does NOT suggest the user import from @cypher-zk/sdk/node"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "drift-test-failure",
+      "prompt": "After cypher-main rebuild and `bun run sync:idl`, tests/unit/layout.test.ts is failing. What do I do?",
+      "expected_output": "Update src/accounts/layout.ts byte-offset constants. The drift test recomputes from the IDL; the failure tells the new offsets.",
+      "expectations": [
+        "Identifies layout.test.ts as a drift-protection test for memcmp byte offsets",
+        "Directs the fix to src/accounts/layout.ts",
+        "Notes the test message shows the new vs expected offsets",
+        "Mentions this is exactly the kind of regression the test exists to catch — don't disable it"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "circular-dep-warnings",
+      "prompt": "I see Rollup chunk-circularity warnings during `bun run build` from react/src/mutations.ts.",
+      "expected_output": "Change imports in react/src to point at specific src/ modules instead of barrels.",
+      "expectations": [
+        "Identifies the cause as barrel imports (../../src/*/index.ts) creating chunk cycles",
+        "Recommends importing from the specific module file (e.g. ../../src/actions/placeBet.ts)",
+        "Names the offending files (mutations.ts, useMarketEvents.ts, etc.)",
+        "Does NOT suggest reconfiguring Rollup output.manualChunks"
+      ]
+    }
+  ]
+}
