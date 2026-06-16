@@ -1,0 +1,47 @@
+{
+  "name": "@cypher-zk/skill",
+  "version": "0.1.1",
+  "description": "Agent skill for building apps on the Cypher privacy-preserving prediction market with @cypher-zk/sdk.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cypher-zk/cypher-skill.git"
+  },
+  "homepage": "https://github.com/cypher-zk/cypher-skill#readme",
+  "bugs": {
+    "url": "https://github.com/cypher-zk/cypher-skill/issues"
+  },
+  "files": [
+    "SKILL.md",
+    "README.md",
+    "frontend",
+    "backend",
+    "references",
+    "evals"
+  ],
+  "keywords": [
+    "agent-skill",
+    "claude-skill",
+    "cursor-skill",
+    "skill",
+    "skills.sh",
+    "cypher",
+    "solana",
+    "arcium",
+    "prediction-market",
+    "anchor",
+    "mpc",
+    "privacy"
+  ],
+  "skill": {
+    "name": "cypher",
+    "entry": "SKILL.md",
+    "subskills": [
+      "frontend/SKILL.md",
+      "backend/SKILL.md"
+    ],
+    "version": "0.1.1",
+    "sdk": "@cypher-zk/sdk@^0.1.0"
+  }
+}
