@@ -10,7 +10,7 @@ description: >
   contract changes, raw circuit work.
 metadata:
   parent_skill: cypher
-  version: "0.2.0"
+  version: "0.4.0"
 ---
 
 # Cypher SDK — Frontend
@@ -261,12 +261,17 @@ TanStack Query `UseQueryResult` shape; each mutation returns
 `UseMutationResult`. Mutation hooks auto-invalidate the relevant query
 keys on success.
 
+`useMarkets()` returns `MarketAccount` objects which have **no `question`
+field**. After the query resolves, batch-fetch questions with
+`fetchMarketQuestions(client, markets)` from `@cypher-zk/sdk`. For a
+single market's question use `client.marketQuestions.fetch(marketPda)`.
+
 | Hook | Returns | Auto-invalidates on success |
 | --- | --- | --- |
 | `useCypherClient()` | `CypherClient` | — |
 | `useGlobalState()` | `UseQueryResult<GlobalStateAccount>` | — |
 | `useMarket(id)` | `UseQueryResult<MarketAccount \| null>` | — |
-| `useMarkets({ creator?, state? })` | `UseQueryResult<{publicKey, account}[]>` | — |
+| `useMarkets({ creator?, state? })` | `UseQueryResult<{publicKey, account}[]>` — no question field | — |
 | `useUserPositions(user)` | `UseQueryResult<{publicKey, account}[]>` | — |
 | `usePlaceBet()` | `UseMutationResult<PlaceBetResult, Error, PlaceBetInputs>` | `marketKeys.one(marketId)` + `positionKeys.byUser(user)` |
 | `useCreateMarket()` | `UseMutationResult<CreateMarketResult, ...>` | `marketKeys.all` |

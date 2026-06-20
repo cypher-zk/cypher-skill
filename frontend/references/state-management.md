@@ -82,9 +82,19 @@ return (
 
 ## Suspense mode
 
-TanStack v5 supports React Suspense:
+The SDK hooks don't expose a suspense variant. Use `useSuspenseQuery` from
+`@tanstack/react-query` directly with the SDK's query-key factories:
 
 ```ts
-const { data } = useGlobalState({ suspense: true } as never);
-// `data` is non-nullable inside a <Suspense fallback={...}>
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { globalStateKeys, useCypherClient } from "@cypher-zk/sdk/react";
+
+function MyComponent() {
+  const client = useCypherClient();
+  const { data } = useSuspenseQuery({
+    queryKey: globalStateKeys.all,
+    queryFn: () => client.globalState.fetch(),
+  });
+  // `data` is non-nullable inside a <Suspense fallback={...}>
+}
 ```

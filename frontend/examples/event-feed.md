@@ -46,6 +46,12 @@ function summarize(e: CypherEvent): string {
       return `${short(e.data.market.toBase58())} cancelled (bond ${e.data.bondReturned})`;
     case "CreatorWithdrawnEvent":
       return `${short(e.data.creator.toBase58())} withdrew ${e.data.total}`;
+    case "ResolutionFlaggedEvent":
+      return `${short(e.data.market.toBase58())} flagged by ${short(e.data.flaggedBy.toBase58())}`;
+    case "MarketFinalizedEvent":
+      return `${short(e.data.market.toBase58())} finalized → outcome ${e.data.outcome}`;
+    case "ResolutionOverriddenEvent":
+      return `${short(e.data.market.toBase58())} overridden → outcome ${e.data.newOutcome}`;
   }
 }
 

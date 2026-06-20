@@ -69,6 +69,7 @@ All return `[PublicKey, bumpSeed]`. All accept an optional
 | `globalStatePda(programId?)` | `["global_state"]` |
 | `marketPda(marketId, programId?)` | `["market", market_id u64 LE]` |
 | `marketVaultPda(market, programId?)` | `["market_vault", market]` |
+| `marketQuestionPda(market, programId?)` | `["market_question", market]` — separate question account (v0.2+) |
 | `positionPda(market, user, programId?)` | `["position", market, user]` |
 | `lpPositionPda(market, creator, programId?)` | `["lp-position", market, creator]` |
 | `arciumSignerPda(programId?)` | `["ArciumSignerAccount"]` |
@@ -152,6 +153,8 @@ import these directly only when constructing tests.
 | `fetchAllMarkets(client)` | `Promise<{publicKey, account}[]>` |
 | `fetchMarketsByCreator(client, creator)` | `Promise<{publicKey, account}[]>` |
 | `fetchMarketsByState(client, state)` | `Promise<{publicKey, account}[]>` |
+| `fetchMarketQuestion(client, market)` | `Promise<MarketQuestionAccount \| null>` — single question (v0.2+) |
+| `fetchMarketQuestions(client, markets)` | `Promise<Map<string, string>>` — batch, keyed by market PDA base58 (v0.2+) |
 | `fetchPosition(client, market, user)` | `Promise<EncryptedPositionAccount \| null>` |
 | `fetchUserPositions(client, user)` | `Promise<{publicKey, account}[]>` |
 | `fetchPositionsForMarket(client, market)` | `Promise<{publicKey, account}[]>` |
@@ -163,12 +166,13 @@ import these directly only when constructing tests.
 | Type | Key fields |
 | --- | --- |
 | `GlobalStateAccount` | `marketCounter`, `protocolFeeRate`, `lpFeeRate`, `acceptedMint`, `admin`, `protocolTreasury` |
-| `MarketAccount` | `marketId`, `question`, `marketType`, `numOutcomes`, `state`, `closeTime`, `revealedPool0..3`, `payoutRatio`, deadlines |
+| `MarketAccount` | `marketId`, `marketType`, `numOutcomes`, `state`, `closeTime`, `revealedPool0..3`, `payoutRatio`, `category`, `creator`, `resolver`, `creatorBond`, `bondWithdrawn`, `outcome`, `disputed`, `totalBetsCount`, deadlines |
+| `MarketQuestionAccount` | `question` (UTF-8 string), `questionLen`, `bump` |
 | `EncryptedPositionAccount` | `user`, `market`, `encryptedAmount`, `encryptedSide`, `userPubkey`, `nonce`, `entryOdds`, `netAmount`, `claimed` |
 | `LpPositionAccount` | `lpProvider`, `market`, `liquidityProvided`, `feesClaimed`, `feesClaimedAmount` |
 
 All numerics are `bigint`. All byte arrays are `Uint8Array(32)`.
-`question` is a UTF-8 string trimmed to `questionLen`.
+`MarketAccount` does NOT include `question` — call `fetchMarketQuestions` or `client.marketQuestions.fetch` to get question text.
 
 ## Memcmp filter helpers
 
@@ -221,11 +225,6 @@ unless you need to compose/simulate/bundle.
 - `initializeIx(client, { protocolFeeRateBps, lpFeeRateBps, admin, protocolTreasury, acceptedMint })`
 - `updateAcceptedMintIx(client, { admin, newMint, newTreasury })`
 - `adminClaimRemainingIx(client, { admin, marketId, protocolTreasury })`
-
-### Comp def init (8 + helper)
-- `initCompDefIx(client, methodName, { payer, addressLookupTable })`
-- `buildAllInitCompDefIx(client, params)` — returns `[{circuit, ix}, ...]`
-- `INIT_COMP_DEF_INSTRUCTIONS` — map of 8 method names → circuit names
 
 ### Market lifecycle
 - `createMarketIx(client, { creator, acceptedMint, question, closeTime, category, expectedMarketId, challengePeriod, bondAmount })`
@@ -339,12 +338,13 @@ client instance:
 | --- | --- |
 | `client.globalState` | `fetch({refresh?})`, `invalidate()` |
 | `client.markets` | `fetch(id)`, `fetchByPda(pda)`, `all()`, `byCreator(pk)`, `byState(n)` |
+| `client.marketQuestions` | `fetch(marketPda)` → `MarketQuestionAccount \| null` |
 | `client.positions` | `fetch(market, user)`, `byUser(user)`, `forMarket(market)` |
 | `client.lpPositions` | `fetch(market, creator)`, `byProvider(pk)` |
 | `client.events` | `subscribeAll`, `subscribe`, `onMarketCreated`, …, `pollEvents`, `parseLogs` |
 | `client.actions` | `createMarket`, `createMarketMulti`, `cancelMarket`, `withdrawCreatorFunds`, `placeBet`, `resolveMarket`, `claimPayout`, `claimRefund`, `flagResolution`, `finalizeResolution`, `adminOverrideResolution` (last 3 = v0.2+) |
-| `client.admin` | `initializeIx`, `updateAcceptedMintIx`, `adminClaimRemainingIx` |
-| `client.compDefs` | `initIx(method, params)`, `buildAllInitIx(params)` |
+| `client.admin` | `initializeIx`, `updateAcceptedMintIx`, `adminClaimRemainingIx` — **Cypher team only** |
+| `client.compDefs` | `initIx(method, params)`, `buildAllInitIx(params)` — **Cypher team only** |
 | `client.marketIx` | `createIx`, `createMultiIx`, `cancelIx`, `withdrawCreatorFundsIx` |
 | `client.bets` | `placeYesnoIx`, `placeMultiIx` |
 | `client.resolveIx` | `yesnoIx`, `multiIx` |
@@ -376,8 +376,8 @@ client instance:
 
 ## Node subpath (`@cypher-zk/sdk/node`)
 
-| Export | Use |
-| --- | --- |
-| `uploadCypherCircuit({client, circuitName, arcisPath, payer})` | Upload `.arcis` bytecode to IPFS + register on chain |
-
-**Never import this in browser code** — it pulls in `node:fs`.
+This subpath exists but is **not needed by app developers**. It contains
+`uploadCypherCircuit` (circuit bytecode upload — Cypher team only) and
+depends on `node:fs`. Never import it in browser code — it will break
+any browser bundler. See
+[backend/references/node-only-apis.md](../backend/references/node-only-apis.md).

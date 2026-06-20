@@ -1,83 +1,38 @@
-# Backend reference — Admin operations checklist
+# Integrator pre-launch checklist
 
-## One-time bootstrap (per cluster)
+Checklist for shipping a Cypher-powered app to production.
 
-- [ ] Deploy `cypher-main` program to target cluster
-- [ ] Create accepted SPL mint (CSDC on devnet, USDC on mainnet, test mint on localnet)
-- [ ] Fund admin keypair with ≥ 2 SOL
-- [ ] Run `scripts/bootstrap.ts` (see [examples/bootstrap.md](../examples/bootstrap.md))
-- [ ] Verify all 8 comp def accounts exist on chain
-- [ ] Verify MXE has `cluster` field populated
-- [ ] Smoke: `createMarket` → assert `market.state === Active`
+## Before going live
 
-## After every contract rebuild
+- [ ] RPC endpoint is a private/paid node (Helius, QuickNode, Triton) — public RPCs throttle `getProgramAccounts`
+- [ ] `acceptedMint` is read from `client.globalState.fetch().acceptedMint`, never hard-coded
+- [ ] Every `placeBet` callsite persists `userKeypair.privateKey` keyed by `position.market`
+- [ ] All market-action buttons are gated on `marketPhase(market)` — not just on `market.state`
+- [ ] Question text is fetched via `fetchMarketQuestions(client, markets)`, never via `market.question`
+- [ ] `PendingResolution` (state=4) is surfaced in the UI — don't show Claim button until state is `Resolved`
+- [ ] `claimPayout` and `claimRefund` deadlines are shown to users so positions don't expire unclaimed
 
-- [ ] `bun run sync:idl` in `cypher-sdk/`
-- [ ] `bun test tests/unit/{layout,idl,errors}.test.ts` — all green
-- [ ] If any drift test fails, update the corresponding SDK file
-- [ ] `bun run typecheck`
-- [ ] `bun test`
-- [ ] Bump SDK version per semver (patch for non-breaking sync, minor
-      for new exports, major for renames/removals)
-- [ ] `npm publish` (which runs `prepublishOnly`)
+## Wallet integration
 
-## Per-release smoke
+- [ ] `CypherClient` constructed once (module-level or `useMemo`) — not per render
+- [ ] `CypherProvider` is mounted inside `QueryClientProvider`, not above it
+- [ ] `readonlyWallet` used for unauthenticated views (market list, etc.) — no wallet required to browse
+- [ ] Wallet disconnect clears any cached client instance
 
-- [ ] Read-only devnet smoke: `DEVNET=1 bun test tests/devnet`
-- [ ] Write devnet smoke (funded keypair):
-      `DEVNET=1 DEVNET_KEYPAIR=… DEVNET_FULL_FLOW=1 bun test tests/devnet`
-- [ ] React example builds + runs: `cd examples/react-vite && bun run dev`
+## Error handling
 
-## Updating fee rates
+- [ ] `parseCypherError(err)` used at top-level catch to surface readable error names to users
+- [ ] `placeBet` timeout bumped for slow networks: `{ timeoutMs: 300_000 }`
+- [ ] `claimPayout` / `claimRefund` catch `AlreadyClaimed` (race on double-click)
 
-```ts
-// Admin only — must be the address pinned in GlobalState.admin
-// There's no dedicated instruction; fee rates are set at initialize
-// and CAN ONLY BE CHANGED by re-initializing (which resets everything).
-// If you need mutable rates, propose a contract change to add an
-// `update_fee_rates` instruction.
+## Node.js scripts
+
+- [ ] Write scripts (create market, resolve) gate on an env var (`KEYPAIR_PATH`, `DRY_RUN`, etc.)
+- [ ] Resolver bot handles `AlreadyResolved` gracefully (two instances can race)
+- [ ] Resolver bot calls `finalizeResolution` after `market.challengeDeadline` elapses
+
+## devnet smoke before mainnet
+
+```bash
+DEVNET=1 DEVNET_RPC=<url> bun test tests/devnet
 ```
-
-## Rotating the accepted mint
-
-The contract supports this via `update_accepted_mint`:
-
-```ts
-const ix = await client.admin.updateAcceptedMintIx({
-  admin: admin.publicKey,
-  newMint: NEW_MINT_PUBKEY,
-  newTreasury: NEW_TREASURY_PUBKEY,
-});
-await sendAndConfirmTransaction(connection, new Transaction().add(ix), [admin]);
-```
-
-**Existing markets keep their old mint.** Only newly created markets use
-the updated mint. Existing positions can still be claimed; vaults remain
-on the old mint.
-
-## Sweeping expired markets
-
-After all deadlines lapse, the admin can sweep leftover vault balance:
-
-```ts
-const ix = await client.admin.adminClaimRemainingIx({
-  admin: admin.publicKey,
-  marketId,
-  protocolTreasury: TREASURY,
-});
-```
-
-Phase gating (`marketPhase(market) === "expired"`) is enforced on-chain.
-Don't run this on a market still in `claimable` or `refundable` phase
-— the contract will reject with `ResolutionDeadlineNotReached`.
-
-## Disaster recovery
-
-| Scenario | Action |
-| --- | --- |
-| Bootstrap step 3 (comp def init) fails partway | Re-run — it's idempotent (skips already-initialized) |
-| Bootstrap step 4 (bytecode upload) fails | Re-run just that step; comp defs persist |
-| Admin keypair lost | **No recovery path** — the `admin` field on `GlobalState` is immutable. Deploy a new program. |
-| IDL on npm is stale | Bump patch version, re-sync, re-publish |
-| Devnet wiped between deploys | Re-bootstrap from scratch — markets, positions, all gone |
-| User lost their x25519 secret | They can still claim payouts/refunds blindly; they just can't *display* their position pre-claim |

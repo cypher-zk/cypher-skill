@@ -1,232 +1,183 @@
-# Recipe — Full localnet integration test
+# Recipe — Devnet integration test
 
-End-to-end suite against Arcium localnet. Run with:
+End-to-end test against real devnet. No localnet, no bootstrapping — just
+a funded keypair with SOL + CSDC (min $40 CSDC for two creator bonds).
 
 ```bash
-# Terminal 1
-cd ../cypher-main && arcium localnet up
-
-# Terminal 2 — once the validator is ready:
-INTEGRATION=1 bun test tests/integration
+DEVNET=1 \
+DEVNET_RPC=<your-rpc-url> \
+DEVNET_KEYPAIR=~/.config/solana/id.json \
+DEVNET_PLACE_BET=1 \
+  bun test tests/devnet/e2e.test.ts --timeout 600000
 ```
 
 ```ts
-// tests/integration/lifecycle.test.ts
+// tests/devnet/e2e.test.ts
 import { describe, test, expect, beforeAll } from "bun:test";
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  LAMPORTS_PER_SOL,
-  Transaction,
-  sendAndConfirmTransaction,
-} from "@solana/web3.js";
+import { Connection, Keypair, PublicKey } from "@solana/web3.js";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { homedir } from "node:os";
 import {
   CypherClient,
-  keypairToWallet,
+  CLUSTERS,
   MarketState,
   MarketType,
-  CLUSTERS,
-  INIT_COMP_DEF_INSTRUCTIONS,
-  type InitCompDefMethodName,
+  MarketCategory,
+  keypairToWallet,
+  readonlyWallet,
+  fetchMarketQuestions,
+  type ActionProgressEvent,
 } from "@cypher-zk/sdk";
 
-const SHOULD_RUN = process.env.INTEGRATION === "1";
+const DEVNET    = process.env.DEVNET === "1";
+const PLACE_BET = process.env.DEVNET_PLACE_BET === "1";
 
-interface State {
-  admin: Keypair;
-  resolver: Keypair;
-  bettor: Keypair;
-  client: CypherClient;
-  acceptedMint?: PublicKey;
-  marketId?: bigint;
+function loadKeypairOrNull(): Keypair | null {
+  const path = process.env.DEVNET_KEYPAIR;
+  if (!path) return null;
+  const expanded = path.startsWith("~") ? resolve(homedir(), path.slice(2)) : path;
+  if (!existsSync(expanded)) return null;
+  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(expanded, "utf8"))));
 }
-const s: State = {
-  admin: Keypair.generate(),
-  resolver: Keypair.generate(),
-  bettor: Keypair.generate(),
-  client: null as never,
-};
 
-describe.skipIf(!SHOULD_RUN)("integration: lifecycle", () => {
-  beforeAll(async () => {
-    const connection = new Connection("http://localhost:8899", "confirmed");
-    s.client = new CypherClient({
-      connection,
-      wallet: keypairToWallet(s.admin),
-      cluster: "localnet",
+const WRITE_KP = DEVNET ? loadKeypairOrNull() : null;
+
+function makeClient(kp?: Keypair): CypherClient {
+  const rpc = process.env.DEVNET_RPC ?? CLUSTERS.devnet.rpc;
+  return new CypherClient({
+    connection: new Connection(rpc, "confirmed"),
+    wallet: kp ? keypairToWallet(kp) : readonlyWallet(Keypair.generate().publicKey),
+    cluster: "devnet",
+  });
+}
+
+function closeTime(secondsFromNow: number): bigint {
+  return BigInt(Math.floor(Date.now() / 1000) + secondsFromNow);
+}
+
+// ── YesNo market ──────────────────────────────────────────────────────────────
+
+describe.skipIf(!DEVNET || !WRITE_KP)("devnet e2e: create YesNo market", () => {
+  let client: CypherClient;
+  let createdMarketId: bigint;
+  let createdMarketPda: PublicKey;
+  const QUESTION = "Will BTC hit $200k before end of 2025?";
+
+  beforeAll(() => { client = makeClient(WRITE_KP!); });
+
+  test("createMarket returns valid signature + PDA", async () => {
+    const result = await client.actions.createMarket({
+      creator: WRITE_KP!.publicKey,
+      question: QUESTION,
+      closeTime: closeTime(3600),
+      category: MarketCategory.Crypto,
     });
-    // Airdrop SOL (chunked to avoid rate limits).
-    for (const kp of [s.admin, s.resolver, s.bettor]) {
-      for (let i = 0; i < 3; i++) {
-        const sig = await connection.requestAirdrop(kp.publicKey, 2 * LAMPORTS_PER_SOL);
-        await connection.confirmTransaction(sig, "confirmed");
-      }
-    }
-  });
+    expect(result.signature.length).toBeGreaterThan(0);
+    expect(result.marketId).toBeGreaterThanOrEqual(0n);
+    createdMarketId = result.marketId;
+    createdMarketPda = result.marketPda;
+  }, 30_000);
 
-  test("01 — cluster preset matches localnet", () => {
-    expect(s.client.cluster.name).toBe("localnet");
-    expect(s.client.cluster.arciumClusterOffset)
-      .toBe(CLUSTERS.localnet.arciumClusterOffset);
-  });
+  test("fetch by ID returns correct fields", async () => {
+    const m = await client.markets.fetch(createdMarketId);
+    expect(m!.marketType).toBe(MarketType.YesNo);
+    expect(m!.state).toBe(MarketState.Active);
+    expect(m!.category).toBe(MarketCategory.Crypto);
+    expect(m!.creator.equals(WRITE_KP!.publicKey)).toBe(true);
+    expect(Number(m!.totalBetsCount)).toBe(0);
+  }, 15_000);
 
-  test("02 — program is deployed", async () => {
-    const info = await s.client.connection.getAccountInfo(s.client.programId);
-    expect(info).not.toBeNull();
-    expect(info!.executable).toBe(true);
-  });
+  test("marketQuestions.fetch returns the question string", async () => {
+    const mq = await client.marketQuestions.fetch(createdMarketPda);
+    expect(mq!.question).toBe(QUESTION);
+  }, 15_000);
 
-  test("03 — initialize (idempotent)", async () => {
-    const existing = await s.client.globalState.fetch().catch(() => null);
-    if (existing) {
-      s.acceptedMint = existing.acceptedMint;
-      return;
-    }
-    // Use a test mint created by `arcium localnet up`. If you don't have
-    // one, create with spl-token CLI before running this suite.
-    const TEST_MINT = new PublicKey(process.env.TEST_MINT!);
-    s.acceptedMint = TEST_MINT;
-    const ix = await s.client.admin.initializeIx({
-      protocolFeeRateBps: 50,
-      lpFeeRateBps: 150,
-      admin: s.admin.publicKey,
-      protocolTreasury: s.admin.publicKey,
-      acceptedMint: TEST_MINT,
-    });
-    await sendAndConfirmTransaction(
-      s.client.connection,
-      new Transaction().add(ix),
-      [s.admin],
-    );
-  });
+  test("fetchMarketQuestions batch includes the new market", async () => {
+    const markets = await client.markets.all();
+    const entry = markets.find((m) => m.account.marketId === createdMarketId)!;
+    const map = await fetchMarketQuestions(client, [entry]);
+    expect(map.get(entry.publicKey.toBase58())).toBe(QUESTION);
+  }, 15_000);
 
-  test("04 — init all 8 comp defs (idempotent)", async () => {
-    const { lut } = await (await import("@cypher-zk/sdk")).fetchMxeLookupTable(s.client);
-    for (const methodName of Object.keys(INIT_COMP_DEF_INSTRUCTIONS) as InitCompDefMethodName[]) {
-      const ix = await s.client.compDefs.initIx(methodName, {
-        payer: s.admin.publicKey,
-        addressLookupTable: lut,
-      });
-      try {
-        await sendAndConfirmTransaction(
-          s.client.connection,
-          new Transaction().add(ix),
-          [s.admin],
-        );
-      } catch (err) {
-        if (!String(err).includes("already in use")) throw err;
-      }
-    }
-  });
-
-  test("05 — createMarket (YesNo)", async () => {
-    const result = await s.client.actions.createMarket({
-      creator: s.admin.publicKey,
-      acceptedMint: s.acceptedMint!,
-      question: "Will integration tests pass?",
-      closeTime: BigInt(Math.floor(Date.now() / 1000) + 600),
-      category: 0,
-    });
-    s.marketId = result.marketId;
-    expect(result.market).not.toBeNull();
-    expect(result.market!.state).toBe(MarketState.Active);
-    expect(result.market!.marketType).toBe(MarketType.YesNo);
-  });
-
-  test("06 — placeBet (YesNo)", async () => {
-    // Bettor needs the accepted mint in their ATA — set that up in
-    // beforeAll if running real funds. Sketched here:
-    const result = await s.client.actions.placeBet({
-      payer: s.bettor.publicKey,
-      user: s.bettor.publicKey,
-      marketId: s.marketId!,
+  test.skipIf(!PLACE_BET)("placeBet on YES and verify position", async () => {
+    const result = await client.actions.placeBet({
+      payer: WRITE_KP!.publicKey,
+      user:  WRITE_KP!.publicKey,
+      marketId: createdMarketId,
       side: 1,
       amountUsdc: 5_000_000n,
+      onProgress: (e: ActionProgressEvent) =>
+        console.log(`[bet] ${e.stage}`, e.message ?? ""),
     });
-    expect(result.position).not.toBeNull();
     expect(result.computation.status).toBe("finalized");
-  });
+    expect(result.position!.market.equals(createdMarketPda)).toBe(true);
+    expect(result.position!.netAmount).toBeGreaterThan(0n);
 
-  test("07 — resolveMarket", async () => {
-    // In a real test, fast-forward the validator clock past close_time
-    // first (e.g. solana-test-validator --warp-slot).
-    const result = await s.client.actions.resolveMarket({
-      payer: s.admin.publicKey,
-      resolver: s.resolver.publicKey,
-      marketId: s.marketId!,
-      outcomeValue: 1,
+    const pos = await client.positions.fetch(createdMarketPda, WRITE_KP!.publicKey);
+    expect(pos!.encryptedAmount.length).toBe(32);
+
+    const m = await client.markets.fetch(createdMarketId);
+    expect(Number(m!.totalBetsCount)).toBe(1);
+  }, 300_000);
+});
+
+// ── MultiOutcome market ───────────────────────────────────────────────────────
+
+describe.skipIf(!DEVNET || !WRITE_KP)("devnet e2e: create MultiOutcome market", () => {
+  let client: CypherClient;
+  let createdMarketId: bigint;
+  let createdMarketPda: PublicKey;
+  const QUESTION = "Which team will win the 2025 FIFA Club World Cup?";
+
+  beforeAll(() => { client = makeClient(WRITE_KP!); });
+
+  test("createMarketMulti returns valid signature + PDA", async () => {
+    const result = await client.actions.createMarketMulti({
+      creator: WRITE_KP!.publicKey,
+      question: QUESTION,
+      closeTime: closeTime(3600),
+      category: MarketCategory.Sports,
+      numOutcomes: 4,
     });
-    expect(result.market?.state).toBe(MarketState.Resolved);
-  });
+    expect(result.marketId).toBeGreaterThanOrEqual(0n);
+    createdMarketId = result.marketId;
+    createdMarketPda = result.marketPda;
+  }, 30_000);
 
-  test("08 — claimPayout", async () => {
-    const result = await s.client.actions.claimPayout({
-      payer: s.bettor.publicKey,
-      user: s.bettor.publicKey,
-      marketId: s.marketId!,
+  test("fetch returns MultiOutcome type with numOutcomes=4", async () => {
+    const m = await client.markets.fetch(createdMarketId);
+    expect(m!.marketType).toBe(MarketType.MultiOutcome);
+    expect(m!.numOutcomes).toBe(4);
+    expect(m!.state).toBe(MarketState.Active);
+  }, 15_000);
+
+  test("marketQuestions.fetch returns the question string", async () => {
+    const mq = await client.marketQuestions.fetch(createdMarketPda);
+    expect(mq!.question).toBe(QUESTION);
+  }, 15_000);
+
+  test.skipIf(!PLACE_BET)("placeBet on outcome 0 and verify position", async () => {
+    const result = await client.actions.placeBet({
+      payer: WRITE_KP!.publicKey,
+      user:  WRITE_KP!.publicKey,
+      marketId: createdMarketId,
+      side: 0,
+      amountUsdc: 5_000_000n,
+      onProgress: (e: ActionProgressEvent) =>
+        console.log(`[bet] ${e.stage}`, e.message ?? ""),
     });
-    expect(result.position?.claimed).toBe(true);
-  });
+    expect(result.computation.status).toBe("finalized");
+    expect(result.userKeypair.privateKey.length).toBe(32);
 
-  test("09 — createMarketMulti", async () => {
-    const result = await s.client.actions.createMarketMulti({
-      creator: s.admin.publicKey,
-      acceptedMint: s.acceptedMint!,
-      question: "Which team wins?",
-      closeTime: BigInt(Math.floor(Date.now() / 1000) + 600),
-      category: 2,
-      numOutcomes: 3,
-    });
-    expect(result.market?.marketType).toBe(MarketType.MultiOutcome);
-    expect(result.market?.numOutcomes).toBe(3);
-  });
-
-  test("10 — pollEvents returns recent activity", async () => {
-    const events = await s.client.events.pollEvents({ limit: 20 });
-    expect(events.length).toBeGreaterThan(0);
-    // Should have at least the createMarket + bet + resolve + claim from above
-    const names = new Set(events.map((e) => e.event.name));
-    expect(names.has("MarketCreatedEvent")).toBe(true);
-    expect(names.has("BetPlacedEvent")).toBe(true);
-    expect(names.has("MarketResolvedEvent")).toBe(true);
-  });
+    const positions = await client.positions.forMarket(createdMarketPda);
+    expect(positions.length).toBe(1);
+  }, 300_000);
 });
 ```
 
-## Pre-requisites for running this suite
+## Pre-requisites
 
-1. **Arcium localnet up** — `cd ../cypher-main && arcium localnet up`
-2. **Program deployed** to the local validator
-3. **Test mint created** and `TEST_MINT` env var set to its pubkey
-4. **Bettor ATA funded** with the test mint (`spl-token create-account
-   <mint>` then `mint <mint> 100 <bettor>`)
-5. **Comp defs initialized** — the test does this lazily, but bytecode
-   upload (step 4 of [bootstrap](./bootstrap.md)) must be done
-   separately (the integration test doesn't shell out to `arcium upload`)
-
-## CI run
-
-The full lifecycle takes ~30s on a clean localnet. In CI:
-
-```yaml
-- name: Start Arcium localnet
-  run: |
-    cd cypher-main
-    arcium localnet up --detach
-    sleep 15
-
-- name: Deploy + bootstrap
-  run: |
-    cd cypher-main
-    anchor deploy
-    cd ../cypher-sdk
-    RPC_URL=http://localhost:8899 \
-    KEYPAIR_PATH=~/.config/solana/id.json \
-    bun run scripts/bootstrap.ts
-
-- name: Integration tests
-  run: |
-    cd cypher-sdk
-    INTEGRATION=1 TEST_MINT=$(cat .test-mint) bun test tests/integration
-```
+- Funded keypair: `solana balance ~/.config/solana/id.json --url devnet`
+- CSDC balance: at least $40 (2× creator bond). Airdrop from the Cypher faucet if needed.
+- A private RPC is strongly recommended — public devnet RPCs throttle `getProgramAccounts`.

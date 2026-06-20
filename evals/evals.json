@@ -91,10 +91,10 @@
       "prompt": "I need to add a new outcome type to the place_private_bet_yesno circuit. Where do I make the change?",
       "expected_output": "Routes the user to cypher-main (the contract repo) and the bundled arcium skill, NOT the cypher-sdk.",
       "expectations": [
-        "Identifies circuit changes belong in cypher-main/encrypted-ixs",
-        "References the arcium skill for circuit authoring guidance",
-        "Notes the SDK only reflects the contract; circuit changes propagate via sync:idl + manual SDK updates",
-        "Does NOT suggest changing anything in @cypher-zk/sdk"
+        "Tells the user that circuit changes are outside the SDK's scope entirely",
+        "States the Cypher team manages the contract and circuits — app developers only use the published SDK",
+        "Does NOT suggest changing anything in @cypher-zk/sdk",
+        "Does NOT give instructions for rebuilding or redeploying"
       ]
     },
     {
@@ -147,25 +147,24 @@
     },
     {
       "id": 13,
-      "name": "drift-test-failure",
-      "prompt": "After cypher-main rebuild and `bun run sync:idl`, tests/unit/layout.test.ts is failing. What do I do?",
-      "expected_output": "Update src/accounts/layout.ts byte-offset constants. The drift test recomputes from the IDL; the failure tells the new offsets.",
+      "name": "circular-dep-browser-bundle",
+      "prompt": "I'm building a Next.js app and getting 'Module node:fs has been externalized for browser compatibility'. What's wrong?",
+      "expected_output": "An import from @cypher-zk/sdk/node leaked into browser code. Remove it — app developers never need the /node subpath.",
       "expectations": [
-        "Identifies layout.test.ts as a drift-protection test for memcmp byte offsets",
-        "Directs the fix to src/accounts/layout.ts",
-        "Notes the test message shows the new vs expected offsets",
-        "Mentions this is exactly the kind of regression the test exists to catch — don't disable it"
+        "Identifies @cypher-zk/sdk/node as the source of node:fs",
+        "States the /node subpath is Cypher-team-only (circuit upload) and never needed by app developers",
+        "Suggests grepping for '@cypher-zk/sdk/node' to find the offending import",
+        "Does NOT suggest configuring webpack fallbacks for node:fs"
       ]
     },
     {
       "id": 14,
-      "name": "circular-dep-warnings",
-      "prompt": "I see Rollup chunk-circularity warnings during `bun run build` from react/src/mutations.ts.",
-      "expected_output": "Change imports in react/src to point at specific src/ modules instead of barrels.",
+      "name": "react-barrel-circularity",
+      "prompt": "I see Rollup chunk-circularity warnings during build from react/src/mutations.ts.",
+      "expected_output": "Change imports in react/src to point at specific src/ modules instead of barrel index files.",
       "expectations": [
         "Identifies the cause as barrel imports (../../src/*/index.ts) creating chunk cycles",
         "Recommends importing from the specific module file (e.g. ../../src/actions/placeBet.ts)",
-        "Names the offending files (mutations.ts, useMarketEvents.ts, etc.)",
         "Does NOT suggest reconfiguring Rollup output.manualChunks"
       ]
     },
@@ -180,6 +179,19 @@
         "Recommends client.actions.finalizeResolution (permissionless) once market.challengeDeadline has passed",
         "Mentions adminOverrideResolution as the path when market.disputed === true",
         "Recommends marketPhase(market) === 'claimable' as the UI gate"
+      ]
+    },
+    {
+      "id": 17,
+      "name": "market-question-fetch",
+      "prompt": "I fetched all markets with useMarkets() but market.question is undefined. How do I get the question text?",
+      "expected_output": "MarketAccount has no question field. Use fetchMarketQuestions(client, markets) to batch-fetch questions in one RPC call, then key by market PDA base58.",
+      "expectations": [
+        "States MarketAccount does not include question",
+        "Names fetchMarketQuestions(client, markets) as the batch helper",
+        "Explains it returns Map<string, string> keyed by market PDA base58",
+        "Shows calling it after useMarkets() resolves (e.g., useEffect or separate query)",
+        "Does NOT suggest reading market.question directly"
       ]
     },
     {

@@ -10,12 +10,11 @@ Complete drop-in component for a Next.js or Vite app. Shows:
 ```tsx
 "use client";
 import { useState } from "react";
-import { usePlaceBet, useMarket } from "@cypher-zk/sdk/react";
+import { usePlaceBet, useMarket, useCypherClient } from "@cypher-zk/sdk/react";
 import {
-  MarketState,
   marketPhase,
   parseCypherError,
-  computeFees,
+  MIN_BET_USDC,
   type ActionProgressEvent,
 } from "@cypher-zk/sdk";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -23,10 +22,12 @@ import { saveSecret } from "./persist-secret";
 
 interface PlaceBetCardProps {
   marketId: bigint;
+  question?: string; // from fetchMarketQuestions — MarketAccount has no question field
 }
 
-export function PlaceBetCard({ marketId }: PlaceBetCardProps) {
+export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
   const wallet = useWallet();
+  const client = useCypherClient();
   const { data: market } = useMarket(marketId);
   const [side, setSide] = useState<0 | 1>(1);
   const [amount, setAmount] = useState("5");
@@ -49,11 +50,12 @@ export function PlaceBetCard({ marketId }: PlaceBetCardProps) {
   }
 
   const amountMicroUsdc = BigInt(Math.round(parseFloat(amount || "0") * 1_000_000));
-  const validAmount = amountMicroUsdc >= market.minBet;
+  const validAmount = amountMicroUsdc >= MIN_BET_USDC;
+  const clusterParam = client.cluster === "mainnet-beta" ? "" : `?cluster=${client.cluster}`;
 
   return (
     <div className="card">
-      <h2>{market.question}</h2>
+      {question && <h2>{question}</h2>}
 
       <fieldset>
         <label>
@@ -81,7 +83,7 @@ export function PlaceBetCard({ marketId }: PlaceBetCardProps) {
         <input
           type="number"
           step="0.01"
-          min={Number(market.minBet) / 1_000_000}
+          min={Number(MIN_BET_USDC) / 1_000_000}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           disabled={placeBet.isPending}
@@ -90,7 +92,7 @@ export function PlaceBetCard({ marketId }: PlaceBetCardProps) {
 
       {!validAmount && (
         <p className="hint">
-          Minimum bet is ${Number(market.minBet) / 1_000_000}.
+          Minimum bet is ${Number(MIN_BET_USDC) / 1_000_000}.
         </p>
       )}
 
@@ -120,7 +122,7 @@ export function PlaceBetCard({ marketId }: PlaceBetCardProps) {
         <p className="success">
           Bet placed!{" "}
           <a
-            href={`https://solscan.io/tx/${placeBet.data.signature}?cluster=devnet`}
+            href={`https://solscan.io/tx/${placeBet.data.signature}${clusterParam}`}
             target="_blank"
             rel="noreferrer"
           >
@@ -176,7 +178,7 @@ The button label streams through the stages:
 | Error | Cause | UX |
 | --- | --- | --- |
 | `MarketNotActive` | Market closed between render and click | Refetch market, hide bet form |
-| `BetTooSmall` | Amount under `market.minBet` | Validated client-side here; should not reach chain |
+| `BetTooSmall` | Amount under `MIN_BET_USDC` | Validated client-side here; should not reach chain |
 | `WrongMint` | User's ATA is the wrong mint | Show "Please use USDC/CSDC" |
 | Computation timeout | Arcium cluster slow | Surface "Network busy, try again" |
 | User rejected signature | Wallet rejection | Silent — `error.message` includes "User rejected" |

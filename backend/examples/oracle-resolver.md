@@ -16,6 +16,7 @@ import {
   marketPhase,
   MarketType,
   parseCypherError,
+  fetchMarketQuestions,
 } from "@cypher-zk/sdk";
 
 const RESOLVER_PATH = process.env.RESOLVER_KEYPAIR!;
@@ -35,10 +36,13 @@ const client = new CypherClient({
  * Replace with your oracle adapter — Pyth, Switchboard, an API call,
  * a custom feed, whatever. Returns the winning outcome index, or null
  * if the answer isn't available yet (the bot will retry next tick).
+ *
+ * Note: MarketAccount has no question field. Pass the question string
+ * from a separate fetchMarketQuestions call (see tick() below).
  */
 async function fetchOutcome(market: {
   marketId: bigint;
-  question: string;
+  question: string; // fetched separately from MarketQuestion account
   marketType: number;
   numOutcomes: number;
 }): Promise<number | null> {
@@ -48,15 +52,20 @@ async function fetchOutcome(market: {
 }
 
 async function tick() {
-  // Fetch all resolver-targeted markets that are awaiting resolution.
-  // Could also filter via `byCreator` or `byResolver` if your bot is
-  // dedicated to one creator/resolver.
-  const markets = await client.markets.byState(MarketState.Active);
-  for (const { account } of markets) {
-    if (!account.resolver.equals(resolver.publicKey)) continue; // not ours
-    if (marketPhase(account) !== "awaitingResolve") continue;
+  const allMarkets = await client.markets.byState(MarketState.Active);
+  const resolverMarkets = allMarkets.filter(
+    ({ account }) =>
+      account.resolver.equals(resolver.publicKey) &&
+      marketPhase(account) === "awaitingResolve",
+  );
+  if (!resolverMarkets.length) return;
 
-    const outcome = await fetchOutcome(account);
+  // Batch-fetch question text (one RPC call for all markets)
+  const questions = await fetchMarketQuestions(client, resolverMarkets);
+
+  for (const { publicKey, account } of resolverMarkets) {
+    const question = questions.get(publicKey.toBase58()) ?? "";
+    const outcome = await fetchOutcome({ ...account, question });
     if (outcome == null) {
       console.log(`[skip] #${account.marketId} — outcome not yet available`);
       continue;

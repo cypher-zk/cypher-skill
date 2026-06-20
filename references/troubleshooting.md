@@ -112,24 +112,6 @@ webpack: (config) => {
 
 Use `parseCypherError(err)` to extract the code; full list in `CypherErrorCode` enum.
 
-## Localnet integration
-
-### Tests hang on first `placeBet`
-
-Arcium localnet not running or MXE has no cluster.
-```bash
-cd cypher-main && arcium localnet up
-# Wait for "MXE active"
-```
-
-### `Cannot fetch GlobalState account`
-
-`initialize` hasn't been called. Run `scripts/bootstrap.ts` first.
-
-### Comp defs "already in use"
-
-Normal between test runs — idempotent. Catch the error.
-
 ## Devnet smoke
 
 ### `payer has 0 lamports`

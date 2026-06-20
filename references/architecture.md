@@ -4,23 +4,24 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  Circuit (Arcis MPC)                                              │
-│  cypher-main/encrypted-ixs/src/lib.rs                             │
-│  8 circuits, pure fixed-shape MPC code                            │
+│  Circuit (Arcium MPC)          ← Cypher team, black box for devs │
+│  8 circuits, fixed-shape MPC code                                 │
 └────────────────────────────┬─────────────────────────────────────┘
                              │ queue + callback
 ┌────────────────────────────▼─────────────────────────────────────┐
-│  Program (Anchor)                                                 │
-│  29 ix · 4 accounts · 10 events · 43 errors                       │
+│  Program (Anchor on-chain)     ← Cypher team, black box for devs │
+│  29 ix · 5 accounts · 10 events · 43 errors                       │
 └────────────────────────────┬─────────────────────────────────────┘
                              │ Anchor IDL
 ┌────────────────────────────▼─────────────────────────────────────┐
-│  Client (@cypher-zk/sdk)                                          │
+│  Client (@cypher-zk/sdk)       ← your surface as an app dev      │
 │  Typed Program · PDA helpers · actions · React hooks              │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-Most bugs live in the gap between two surfaces. This skill targets the bottom layer.
+As an app developer you only interact with the bottom layer. Errors from
+the top two layers surface as `CypherError` codes — look them up in
+[troubleshooting.md](troubleshooting.md#on-chain-cyphererror-codes-6000–6035).
 
 ## Account topology
 
@@ -31,8 +32,9 @@ GlobalState (PDA ["global_state"])
   └─ market_counter ++ on createMarket
             ▼
     Market (PDA ["market", id u64 LE])
-      ├─ question · state · deadlines · revealedPool0..3 · payoutRatio
+      ├─ state · deadlines · revealedPool0..3 · payoutRatio · creator · category
       │
+      ├─► MarketQuestion (PDA ["market_question", market]) — question text
       ├─► MarketVault (PDA ["market_vault", market]) — SPL ATA
       ├─► LPPosition (PDA ["lp-position", market, creator]) — bond + fees
       └─► EncryptedPosition (PDA ["position", market, user])

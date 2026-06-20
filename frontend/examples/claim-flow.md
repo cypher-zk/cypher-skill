@@ -7,31 +7,26 @@ import {
   useClaimPayout,
   useClaimRefund,
   useMarket,
-  useCypherClient,
+  useUserPositions,
 } from "@cypher-zk/sdk/react";
 import {
   marketPhase,
+  marketPda,
   type ActionProgressEvent,
   type EncryptedPositionAccount,
 } from "@cypher-zk/sdk";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { useQuery } from "@tanstack/react-query";
 
 export function ClaimCard({ marketId }: { marketId: bigint }) {
   const wallet = useWallet();
-  const client = useCypherClient();
   const { data: market } = useMarket(marketId);
 
-  // Load this user's position via PDA derivation:
-  const { data: position } = useQuery({
-    queryKey: ["cypher", "position", String(marketId), wallet.publicKey?.toBase58()],
-    queryFn: () => {
-      if (!market || !wallet.publicKey) return null;
-      // Use the market PDA from useMarket's keys — derived already.
-      return client.positions.fetch(getMarketPda(market.marketId), wallet.publicKey);
-    },
-    enabled: !!market && !!wallet.publicKey,
-  });
+  // useUserPositions uses positionKeys.byUser internally — auto-invalidated after claim.
+  const { data: allPositions } = useUserPositions(wallet.publicKey ?? undefined);
+  const targetPda = marketPda(marketId)[0];
+  const position = allPositions
+    ?.find(({ account }) => account.market.equals(targetPda))
+    ?.account ?? null;
 
   const [stage, setStage] = useState<ActionProgressEvent | null>(null);
   const payout = useClaimPayout({});
@@ -80,12 +75,7 @@ function labelFor(e: ActionProgressEvent): string {
   }
 }
 
-function getMarketPda(marketId: bigint) {
-  // Tiny helper — usually you'd import `marketPda` from "@cypher-zk/sdk"
-  // and call `marketPda(marketId)[0]`.
-  const { marketPda } = require("@cypher-zk/sdk");
-  return marketPda(marketId)[0];
-}
+
 ```
 
 ## What about losing bets?

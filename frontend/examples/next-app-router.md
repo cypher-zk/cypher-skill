@@ -46,13 +46,15 @@ const wallets = [new PhantomWalletAdapter()];
 function CypherShell({ children }: { children: React.ReactNode }) {
   const wallet = useWallet();
   const client = useMemo(() => {
-    if (!wallet.publicKey || !wallet.signTransaction) return null;
+    if (!wallet.publicKey) return null;
     return new CypherClient({
       connection: new Connection(RPC, "confirmed"),
       wallet: wallet as never,
       cluster: "devnet",
     });
-  }, [wallet.publicKey, wallet.signTransaction]);
+  // wallet.signTransaction is a new function ref every render on most adapters
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet.publicKey]);
 
   if (!client) return <>{children}</>;
   return <CypherProvider client={client}>{children}</CypherProvider>;
