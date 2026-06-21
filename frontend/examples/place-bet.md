@@ -14,7 +14,6 @@ import { usePlaceBet, useMarket, useCypherClient } from "@cypher-zk/sdk/react";
 import {
   marketPhase,
   parseCypherError,
-  MIN_BET_USDC,
   type ActionProgressEvent,
 } from "@cypher-zk/sdk";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -50,8 +49,8 @@ export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
   }
 
   const amountMicroUsdc = BigInt(Math.round(parseFloat(amount || "0") * 1_000_000));
-  const validAmount = amountMicroUsdc >= MIN_BET_USDC;
-  const clusterParam = client.cluster === "mainnet-beta" ? "" : `?cluster=${client.cluster}`;
+  const validAmount = amountMicroUsdc >= market.minBet;
+  const clusterParam = client.cluster.name === "mainnet" ? "" : `?cluster=${client.cluster.name}`;
 
   return (
     <div className="card">
@@ -83,7 +82,7 @@ export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
         <input
           type="number"
           step="0.01"
-          min={Number(MIN_BET_USDC) / 1_000_000}
+          min={Number(market.minBet) / 1_000_000}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           disabled={placeBet.isPending}
@@ -92,7 +91,7 @@ export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
 
       {!validAmount && (
         <p className="hint">
-          Minimum bet is ${Number(MIN_BET_USDC) / 1_000_000}.
+          Minimum bet is ${Number(market.minBet) / 1_000_000}.
         </p>
       )}
 
@@ -178,7 +177,7 @@ The button label streams through the stages:
 | Error | Cause | UX |
 | --- | --- | --- |
 | `MarketNotActive` | Market closed between render and click | Refetch market, hide bet form |
-| `BetTooSmall` | Amount under `MIN_BET_USDC` | Validated client-side here; should not reach chain |
+| `BetTooSmall` | Amount under `market.minBet` | Validated client-side here; should not reach chain |
 | `WrongMint` | User's ATA is the wrong mint | Show "Please use USDC/CSDC" |
 | Computation timeout | Arcium cluster slow | Surface "Network busy, try again" |
 | User rejected signature | Wallet rejection | Silent — `error.message` includes "User rejected" |

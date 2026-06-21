@@ -166,7 +166,7 @@ import these directly only when constructing tests.
 | Type | Key fields |
 | --- | --- |
 | `GlobalStateAccount` | `marketCounter`, `protocolFeeRate`, `lpFeeRate`, `acceptedMint`, `admin`, `protocolTreasury` |
-| `MarketAccount` | `marketId`, `marketType`, `numOutcomes`, `state`, `closeTime`, `revealedPool0..3`, `payoutRatio`, `category`, `creator`, `resolver`, `creatorBond`, `bondWithdrawn`, `outcome`, `disputed`, `totalBetsCount`, deadlines |
+| `MarketAccount` | `marketId`, `marketType`, `numOutcomes`, `state`, `closeTime`, `minBet`, `revealedPool0..3`, `payoutRatio`, `category`, `creator`, `resolver`, `creatorBond`, `bondWithdrawn`, `outcome`, `disputed`, `totalBetsCount`, deadlines |
 | `MarketQuestionAccount` | `question` (UTF-8 string), `questionLen`, `bump` |
 | `EncryptedPositionAccount` | `user`, `market`, `encryptedAmount`, `encryptedSide`, `userPubkey`, `nonce`, `entryOdds`, `netAmount`, `claimed` |
 | `LpPositionAccount` | `lpProvider`, `market`, `liquidityProvided`, `feesClaimed`, `feesClaimedAmount` |
