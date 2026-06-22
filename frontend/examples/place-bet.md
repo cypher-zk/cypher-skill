@@ -14,6 +14,8 @@ import { usePlaceBet, useMarket, useCypherClient } from "@cypher-zk/sdk/react";
 import {
   marketPhase,
   parseCypherError,
+  parseEmbeddedOptions,
+  getMarketOptionLabels,
   type ActionProgressEvent,
 } from "@cypher-zk/sdk";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -28,7 +30,7 @@ export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
   const wallet = useWallet();
   const client = useCypherClient();
   const { data: market } = useMarket(marketId);
-  const [side, setSide] = useState<0 | 1>(1);
+  const [side, setSide] = useState<number>(1);
   const [amount, setAmount] = useState("5");
   const [progress, setProgress] = useState<ActionProgressEvent | null>(null);
 
@@ -52,29 +54,25 @@ export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
   const validAmount = amountMicroUsdc >= market.minBet;
   const clusterParam = client.cluster.name === "mainnet" ? "" : `?cluster=${client.cluster.name}`;
 
+  const { displayQuestion } = question ? parseEmbeddedOptions(question) : { displayQuestion: "" };
+  const optionLabels = question && market ? getMarketOptionLabels(market, question) : [];
+
   return (
     <div className="card">
-      {question && <h2>{question}</h2>}
+      {displayQuestion && <h2>{displayQuestion}</h2>}
 
       <fieldset>
-        <label>
-          <input
-            type="radio"
-            checked={side === 1}
-            onChange={() => setSide(1)}
-            disabled={placeBet.isPending}
-          />
-          YES
-        </label>
-        <label>
-          <input
-            type="radio"
-            checked={side === 0}
-            onChange={() => setSide(0)}
-            disabled={placeBet.isPending}
-          />
-          NO
-        </label>
+        {optionLabels.map((label, index) => (
+          <label key={index}>
+            <input
+              type="radio"
+              checked={side === index}
+              onChange={() => setSide(index)}
+              disabled={placeBet.isPending}
+            />
+            {label}
+          </label>
+        ))}
       </fieldset>
 
       <label>
@@ -110,7 +108,7 @@ export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
       >
         {placeBet.isPending && progress
           ? labelFor(progress)
-          : `Bet $${amount} on ${side === 1 ? "YES" : "NO"}`}
+          : `Bet $${amount} on ${optionLabels[side] || "Option"}`}
       </button>
 
       {placeBet.error && (

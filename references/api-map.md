@@ -128,8 +128,8 @@ const { protocolFee, lpFee, netAmount } = computeFees(5_000_000n, {
 
 | Export | Kind |
 | --- | --- |
-| `CypherErrorCode` | const enum of 43 codes (6000–6042) |
-| `CypherErrorName` | union of 43 string names |
+| `CypherErrorCode` | const enum of 45 codes (6000–6044) |
+| `CypherErrorName` | union of 45 string names |
 | `CypherErrorCodeValue` | union of the numeric codes |
 | `CYPHER_ERROR_MESSAGES` | `Record<CypherErrorName, string>` |
 | `cypherErrorName(code)` | `(number) => CypherErrorName \| undefined` |
@@ -376,8 +376,7 @@ client instance:
 
 ## Node subpath (`@cypher-zk/sdk/node`)
 
-This subpath exists but is **not needed by app developers**. It contains
-`uploadCypherCircuit` (circuit bytecode upload — Cypher team only) and
-depends on `node:fs`. Never import it in browser code — it will break
+This subpath exists but is **not needed by app developers**. It is currently an empty placeholder
+for future Node-only admin helpers. Never import it in browser code — it will break
 any browser bundler. See
 [backend/references/node-only-apis.md](../backend/references/node-only-apis.md).

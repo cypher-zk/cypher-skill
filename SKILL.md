@@ -15,7 +15,7 @@ description: >
 license: MIT
 metadata:
   author: cypher-zk
-  version: "0.4.0"
+  version: "0.4.1"
   sdk_package: "@cypher-zk/sdk"
   sdk_repo: "https://github.com/cypher-zk/cypher-sdk"
   contract_program_id: "cyphPe923pnPGVXJL3a3P7t2W9mJsagBcg1oeauoh2B"
@@ -28,7 +28,7 @@ on chain via Arcium MPC; the SDK (`@cypher-zk/sdk`) wraps the encrypt →
 submit → await callback → refetch choreography behind one async
 `client.actions.placeBet({...})` call with per-stage progress events.
 
-> **Targets `@cypher-zk/sdk@0.7.6`**. Always verify: `cat node_modules/@cypher-zk/sdk/package.json | grep version`
+> **Targets `@cypher-zk/sdk@0.7.8`**. Always verify the actual version the user has installed in their `package.json` or `node_modules`.
 
 ## Your surface
 
@@ -63,6 +63,15 @@ orchestration. If a `CypherError` code appears, look it up in
 | SDK export / function signature | [references/api-map.md](references/api-map.md) |
 | Error diagnosis | [references/troubleshooting.md](references/troubleshooting.md) |
 | Account topology + bet flow | [references/architecture.md](references/architecture.md) |
+
+## AI / Agent Directives
+
+When acting as an AI assistant using this skill to help a user, follow these strict rules:
+
+1. **IMMEDIATE STARTUP CHECK (Verify Version)**: The very first thing you must do when loaded in a session is to verify the user's installed `@cypher-zk/sdk` version using `view_file` or `grep_search` on their `package.json` (or `node_modules`). The user might be on an older version of the SDK. If their version is older than or differs from the target version (0.7.8), you MUST notify them immediately before writing any code and account for potential breaking changes.
+2. **Strict Web3.js Version**: The Cypher SDK and Anchor fundamentally require `@solana/web3.js` version 1 (e.g., `^1.95.4`). **NEVER** install or suggest `@solana/web3.js` version 2 (`@solana/web3.js@latest`) as it is a complete rewrite and breaks everything.
+3. **Consult Source of Truth**: When in doubt about function signatures, component props, enum values, or data structures, use `view_file` on the actual `node_modules/@cypher-zk/sdk/**/*.d.ts` files. Do not guess or hallucinate the API structure based on generic Solana/Anchor knowledge.
+4. **Trace Implementation**: If a bug occurs, trace the actual SDK source code or view the comprehensive `api-map.md` rather than assuming Anchor IDL behaviors. The Cypher SDK wraps Anchor interactions heavily (especially around Arcium MPC).
 
 ## NEVER (anti-hallucination)
 

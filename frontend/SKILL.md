@@ -10,7 +10,7 @@ description: >
   contract changes, raw circuit work.
 metadata:
   parent_skill: cypher
-  version: "0.4.0"
+  version: "0.4.1"
 ---
 
 # Cypher SDK — Frontend
@@ -53,8 +53,9 @@ accounts, RescueCipher, or x25519 — `client.actions.*` hides all of it.
 ### 1. Set up a client
 
 ```bash
-bun add @cypher-zk/sdk @solana/web3.js @tanstack/react-query react
+bun add @cypher-zk/sdk @solana/web3.js@^1.95.4 @tanstack/react-query react
 ```
+> **CRITICAL**: The SDK relies on Anchor and `@solana/web3.js` v1. Do **not** install `@solana/web3.js` v2.x, as it is a complete rewrite and fundamentally incompatible.
 
 ```tsx
 // app/cypher-client.ts (Next.js) or src/cypher-client.ts (Vite)
@@ -352,6 +353,35 @@ const canAdminOverride = phase === "disputed";          // v0.2+: admin only
 const canClaim         = phase === "claimable";         // only after a finalized market
 const canRefund        = phase === "refundable";        // unresolved past resolution_deadline
 ```
+
+## Multi-outcome markets & Option Labels
+
+MultiOutcome markets (where `market.marketType === 1`) embed their option labels inside the question text using a bracketed suffix: `Which team will win? [Lakers|Celtics|Heat]`.
+
+The SDK provides three helpers to abstract this away so you don't need to write regexes, and they gracefully handle both YesNo and MultiOutcome markets:
+
+```ts
+import { parseEmbeddedOptions, getMarketOptionLabels, formatOutcome } from "@cypher-zk/sdk";
+
+// 1. Clean up the question text for display
+const { displayQuestion, optionLabels } = parseEmbeddedOptions(questionText);
+// Returns:
+// displayQuestion: "Which team will win?"
+// optionLabels: ["Lakers", "Celtics", "Heat"] (or empty if it's a YesNo market)
+
+// 2. Get the actual labels for the betting buttons/UI
+const labels = getMarketOptionLabels(market, questionText);
+// If YesNo: returns ["No", "Yes"]
+// If Multi: returns ["Lakers", "Celtics", "Heat"]
+
+// 3. Format the final resolved outcome label
+const result = formatOutcome(market, questionText);
+// If Resolved YesNo: returns "Yes" or "No"
+// If Resolved Multi: returns "Lakers", etc.
+// If Unresolved: returns null
+```
+
+Always use `parseEmbeddedOptions(question).displayQuestion` instead of rendering the raw question text directly, otherwise users will see the ugly `[A|B|C]` suffix on MultiOutcome markets.
 
 ## Recipes
 

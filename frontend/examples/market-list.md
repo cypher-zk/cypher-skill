@@ -9,6 +9,7 @@ import {
   MarketCategory,
   marketPhase,
   fetchMarketQuestions,
+  parseEmbeddedOptions,
   type MarketPhase,
   type MarketAccount,
 } from "@cypher-zk/sdk";
@@ -101,7 +102,7 @@ function MarketCard({
           {badge.label}
         </span>
         <span className="category">{CATEGORY_LABELS[market.category]}</span>
-        <h3>{question || <em>Loading…</em>}</h3>
+        <h3>{question ? parseEmbeddedOptions(question).displayQuestion : <em>Loading…</em>}</h3>
         <small>
           {phase === "betting"
             ? `Closes ${new Date(Number(market.closeTime) * 1000).toLocaleString()}`

@@ -88,7 +88,7 @@ webpack: (config) => {
 // ✅ import type { MarketAccount } from "../../src/accounts/market.ts";
 ```
 
-## On-chain `CypherError` codes (6000–6035)
+## On-chain `CypherError` codes (6000–6044)
 
 | Code | Name | Cause | Frontend fix |
 | --- | --- | --- | --- |
@@ -109,6 +109,8 @@ webpack: (config) => {
 | 6040 | `ChallengePeriodElapsed` | flag called after the window closed | Window closed — no further flags accepted |
 | 6041 | `MarketDisputed` | finalize called on a flagged market | Admin must call `adminOverrideResolution` first |
 | 6042 | `MarketNotDisputed` | admin override called on a non-disputed market | Only valid when `market.disputed === true` |
+| 6043 | `MarketNotDisputed` | Same as above (historical IDL artifact) | Treat same as 6042 |
+| 6044 | `UnauthorizedUser` | Caller ≠ position user | Ensure wallet matches the position owner |
 
 Use `parseCypherError(err)` to extract the code; full list in `CypherErrorCode` enum.
 

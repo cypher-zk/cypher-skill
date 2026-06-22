@@ -182,19 +182,6 @@
       ]
     },
     {
-      "id": 17,
-      "name": "market-question-fetch",
-      "prompt": "I fetched all markets with useMarkets() but market.question is undefined. How do I get the question text?",
-      "expected_output": "MarketAccount has no question field. Use fetchMarketQuestions(client, markets) to batch-fetch questions in one RPC call, then key by market PDA base58.",
-      "expectations": [
-        "States MarketAccount does not include question",
-        "Names fetchMarketQuestions(client, markets) as the batch helper",
-        "Explains it returns Map<string, string> keyed by market PDA base58",
-        "Shows calling it after useMarkets() resolves (e.g., useEffect or separate query)",
-        "Does NOT suggest reading market.question directly"
-      ]
-    },
-    {
       "id": 16,
       "name": "v0.2-flag-resolution-ui",
       "prompt": "How do I let any user flag a wrong resolution during the challenge window?",
@@ -205,6 +192,19 @@
         "Mentions that flagging blocks finalizeResolution until adminOverrideResolution runs",
         "Notes the challenge_period is configurable per market in [24h, 48h]",
         "Surfaces market.challengeDeadline as the countdown anchor"
+      ]
+    },
+    {
+      "id": 17,
+      "name": "market-question-fetch",
+      "prompt": "I fetched all markets with useMarkets() but market.question is undefined. How do I get the question text?",
+      "expected_output": "MarketAccount has no question field. Use fetchMarketQuestions(client, markets) to batch-fetch questions in one RPC call, then key by market PDA base58.",
+      "expectations": [
+        "States MarketAccount does not include question",
+        "Names fetchMarketQuestions(client, markets) as the batch helper",
+        "Explains it returns Map<string, string> keyed by market PDA base58",
+        "Shows calling it after useMarkets() resolves (e.g., useEffect or separate query)",
+        "Does NOT suggest reading market.question directly"
       ]
     }
   ]

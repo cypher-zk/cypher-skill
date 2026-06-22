@@ -5,7 +5,7 @@ The SDK ships three importable subpaths:
 ```ts
 import { ... } from "@cypher-zk/sdk";          // browser-safe core + Node
 import { ... } from "@cypher-zk/sdk/react";    // React hooks
-import { ... } from "@cypher-zk/sdk/node";     // Node-only (circuit upload — Cypher team only)
+import { ... } from "@cypher-zk/sdk/node";     // Node-only placeholder (future Cypher team only)
 ```
 
 ## What you need as an app developer
@@ -19,9 +19,10 @@ Everything you need as an app developer is in the **core** subpath:
 
 ## What's in `/node` (and why you don't need it)
 
-The `/node` subpath contains `uploadCypherCircuit`, which uploads Arcium
-circuit bytecode to IPFS. This is a Cypher team operation performed once
-per deployment — app developers never call it.
+The `/node` subpath is currently an empty placeholder, reserved for future
+Node-only admin helpers like uploading Arcium circuit bytecode to IPFS.
+These will be Cypher team operations performed once per deployment — app
+developers never call them.
 
 It depends on `node:fs` and is split out so browser bundlers don't choke:
 

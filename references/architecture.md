@@ -10,7 +10,7 @@
                              │ queue + callback
 ┌────────────────────────────▼─────────────────────────────────────┐
 │  Program (Anchor on-chain)     ← Cypher team, black box for devs │
-│  29 ix · 5 accounts · 10 events · 43 errors                       │
+│  29 ix · 5 accounts · 10 events · 45 errors                       │
 └────────────────────────────┬─────────────────────────────────────┘
                              │ Anchor IDL
 ┌────────────────────────────▼─────────────────────────────────────┐
