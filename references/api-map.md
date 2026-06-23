@@ -439,7 +439,8 @@ client instance:
 | `useGlobalState(opts?)` | query hook |
 | `useMarket(id, opts?)` | query hook |
 | `useMarkets({ creator?, state? }, opts?)` | query hook |
-| `useUserPositions(user, opts?)` | query hook |
+| `useUserPositions(user, opts?)` | query hook — all positions for a user across all markets |
+| `usePosition(market, user, opts?)` | query hook — single position for a `(market, user)` pair; returns `null` when no bet exists |
 | `usePlaceBet(opts?)` | mutation hook |
 | `useCreateMarket(opts?)` | mutation hook |
 | `useResolveMarket(opts?)` | mutation hook |
@@ -450,7 +451,7 @@ client instance:
 | `useFinalizeResolution(opts?)` (v0.2+) | mutation hook |
 | `useAdminOverrideResolution(opts?)` (v0.2+) | mutation hook |
 | `useMarketEvents(opts?)` | subscription hook (returns `CypherEvent[]`) |
-| `globalStateKeys`, `marketKeys`, `positionKeys` | query-key factories |
+| `globalStateKeys`, `marketKeys`, `positionKeys` | query-key factories — `positionKeys.byUser(pk)`, `positionKeys.forMarket(pk)`, `positionKeys.forPair(market, user)` |
 | `UseMarketsFilter` | type |
 
 ## Node subpath (`@cypher-zk/sdk/node`)

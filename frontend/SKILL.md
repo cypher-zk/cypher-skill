@@ -274,7 +274,8 @@ single market's question use `client.marketQuestions.fetch(marketPda)`.
 | `useGlobalState()` | `UseQueryResult<GlobalStateAccount>` | — |
 | `useMarket(id)` | `UseQueryResult<MarketAccount \| null>` | — |
 | `useMarkets({ creator?, state? })` | `UseQueryResult<{publicKey, account}[]>` — no question field | — |
-| `useUserPositions(user)` | `UseQueryResult<{publicKey, account}[]>` | — |
+| `useUserPositions(user)` | `UseQueryResult<{publicKey, account}[]>` — all markets | — |
+| `usePosition(market, user)` | `UseQueryResult<EncryptedPositionAccount \| null>` — single pair | — |
 | `usePlaceBet()` | `UseMutationResult<PlaceBetResult, Error, PlaceBetInputs>` | `marketKeys.one(marketId)` + `positionKeys.byUser(user)` |
 | `useCreateMarket()` | `UseMutationResult<CreateMarketResult, ...>` | `marketKeys.all` |
 | `useResolveMarket()` | `UseMutationResult<ResolveMarketResult, ...>` | `marketKeys.one(marketId)` |
@@ -289,7 +290,27 @@ single market's question use `client.marketQuestions.fetch(marketPda)`.
 Query-key factories you can hand to `queryClient.invalidateQueries()`
 manually: `globalStateKeys.all`, `marketKeys.all`, `marketKeys.one(id)`,
 `marketKeys.byCreator(pk)`, `marketKeys.byState(n)`,
-`positionKeys.byUser(pk)`.
+`positionKeys.byUser(pk)`, `positionKeys.forMarket(pk)`,
+`positionKeys.forPair(market, user)`.
+
+### One position per user per market
+
+The on-chain `EncryptedPosition` PDA is seeded by `["position", market, user_wallet]`.
+A wallet can only hold **one position per market** — a second `place_private_bet_*` call
+will fail with `AccountAlreadyInUse`. Always check before allowing a user to submit:
+
+```ts
+import { usePosition } from "@cypher-zk/sdk/react";
+
+// marketPda: PublicKey, userPubkey: PublicKey | null
+const { data: position, isLoading } = usePosition(marketPda, userPubkey, {
+  refetchInterval: 5_000,
+});
+const hasBet = position != null; // null = no position, object = already bet
+```
+
+Use `isLoading` to disable your submit button while the check is in flight (e.g. on
+page load). Do **not** rely only on local state — it resets on page refresh.
 
 ## Live events
 
