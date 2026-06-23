@@ -75,7 +75,28 @@ const mq = await client.marketQuestions.fetch(result.marketPda);
 console.log("question:", mq?.question);
 ```
 
-For MultiOutcome markets use `client.actions.createMarketMulti({ ..., numOutcomes: 4 })`.
+For MultiOutcome markets, **embed the option labels into the question string** before creating.
+`getMarketOptionLabels` on the frontend reads them back from this suffix:
+
+```ts
+import { MAX_QUESTION_BYTES } from "@cypher-zk/sdk";
+
+const options = ["Lakers", "Celtics", "Heat", "Bucks"];
+const onChainQuestion = `Who wins the NBA Finals? [${options.join("|")}]`;
+if (new TextEncoder().encode(onChainQuestion).length > MAX_QUESTION_BYTES) {
+  throw new Error("Question too long");
+}
+
+await client.actions.createMarketMulti({
+  creator: kp.publicKey,
+  question: onChainQuestion,
+  numOutcomes: options.length,
+  closeTime: BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 3600),
+  category: MarketCategory.Sports,
+});
+```
+
+Without the `[…]` suffix, frontend `getMarketOptionLabels` falls back to `["Outcome 1", …]`.
 
 ## Event indexer pattern
 
@@ -176,7 +197,9 @@ for a ready-to-run devnet test suite.
 - [ ] Scripts use `keypairToWallet(kp)`, never `wallet: kp` directly.
 - [ ] `readonlyWallet` for read-only scripts (no signing needed).
 - [ ] Indexer checkpoints in the SAME DB transaction as the event row.
-- [ ] `MarketCreatedEvent.data.question` is available on events; `MarketAccount` has no question field.
+- [ ] `MarketCreatedEvent.data.question` is available on events; current `MarketAccount` (v3) has no inline question field — legacy v1/v2 accounts have `inlineQuestion`.
 - [ ] All event field accesses use camelCase + `bigint` (not snake_case / BN).
 - [ ] Write scripts gate on `DEVNET_KEYPAIR` env var being set.
 - [ ] Resolver bots call `finalizeResolution` after `market.challengeDeadline` elapses.
+- [ ] MultiOutcome creation writes `[A|B|C]` suffix into the question string.
+- [ ] Cancel scripts call `cancelEligibility(market)` before `cancelMarketAction` to surface clean errors.

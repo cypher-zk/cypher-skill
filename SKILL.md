@@ -100,6 +100,20 @@ When acting as an AI assistant using this skill to help a user, follow these str
   pulls in `node:fs` and will break any browser bundler.
 - **NEVER** import types from `react/src/` barrels (`index.ts`) — it
   causes Rollup chunk circularity. Import from the specific module.
+- **NEVER** render a raw question string directly. MultiOutcome markets
+  embed `[Option A|Option B|…]` in the on-chain question. Always strip it:
+  `parseEmbeddedOptions(rawQuestion).displayQuestion`. Pass the raw string
+  (unsstripped) to `getMarketOptionLabels`.
+- **NEVER** hardcode `["YES","NO"]` buttons for a MultiOutcome market.
+  Use `getMarketOptionLabels(market, rawQuestion)` — it returns `["NO","YES"]`
+  for YesNo markets and the real option names for MultiOutcome.
+- **NEVER** hardcode category, state, or market-type display strings.
+  Use `marketCategoryName(c)`, `marketStateName(s)`, `marketTypeName(t)` from
+  the SDK so they stay in sync with the on-chain enum.
+- **NEVER** call `cancelMarketAction` without first checking
+  `cancelEligibility(market)`. As of 0.7.8 the action runs this check
+  internally, but surfacing the reason to the user before sending a tx
+  saves a round-trip.
 
 ## Core mental model
 
@@ -127,10 +141,14 @@ See [frontend/SKILL.md → Progress events](frontend/SKILL.md#progress-events).
 
 - [ ] Every `placeBet` callsite stores `userKeypair.privateKey`.
 - [ ] Every event-field access uses camelCase, not snake_case.
-- [ ] Questions are fetched via `fetchMarketQuestions`, not `market.question`.
+- [ ] Question text rendered via `parseEmbeddedOptions(rawQuestion).displayQuestion` — never raw.
+- [ ] Option labels rendered via `getMarketOptionLabels(market, rawQuestion)` — never hardcoded.
+- [ ] Question fetching uses the full fallback: `questionMap.get(pda) || account.inlineQuestion || "Market #N"`.
+- [ ] Category/state/type names use `marketCategoryName` / `marketStateName` / `marketTypeName`.
 - [ ] No browser bundle imports from `@cypher-zk/sdk/node`.
 - [ ] No `react/src/` file imports from `../../src/*/index.ts` barrels.
 - [ ] Claim/resolve/flag buttons are gated on `marketPhase(market)`.
+- [ ] MultiOutcome creation embeds labels into the question before `createMarketMulti`.
 
 ## API reference
 

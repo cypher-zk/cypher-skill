@@ -6,24 +6,14 @@ import { useState, useEffect } from "react";
 import { useMarkets, useCypherClient } from "@cypher-zk/sdk/react";
 import {
   MarketState,
-  MarketCategory,
   marketPhase,
+  marketCategoryName,
   fetchMarketQuestions,
   parseEmbeddedOptions,
   type MarketPhase,
   type MarketAccount,
 } from "@cypher-zk/sdk";
 import { PublicKey } from "@solana/web3.js";
-
-const CATEGORY_LABELS: Record<number, string> = {
-  [MarketCategory.Crypto]: "Crypto",
-  [MarketCategory.Politics]: "Politics",
-  [MarketCategory.Sports]: "Sports",
-  [MarketCategory.Tech]: "Tech",
-  [MarketCategory.Economy]: "Economy",
-  [MarketCategory.Culture]: "Culture",
-  [MarketCategory.Beyond]: "Beyond",
-};
 
 const PHASE_BADGE: Record<MarketPhase, { color: string; label: string }> = {
   betting:             { color: "#22c55e", label: "Open" },
@@ -68,14 +58,21 @@ export function MarketList() {
       </select>
 
       <ul>
-        {markets.map(({ publicKey, account }) => (
-          <MarketCard
-            key={publicKey.toBase58()}
-            pda={publicKey}
-            market={account}
-            question={questions.get(publicKey.toBase58()) ?? ""}
-          />
-        ))}
+        {markets.map(({ publicKey, account }) => {
+          // Full fallback chain: v3 PDA question → v1/v2 inlineQuestion → placeholder
+          const rawQuestion =
+            questions.get(publicKey.toBase58()) ||
+            account.inlineQuestion ||
+            `Market #${account.marketId}`;
+          return (
+            <MarketCard
+              key={publicKey.toBase58()}
+              pda={publicKey}
+              market={account}
+              rawQuestion={rawQuestion}
+            />
+          );
+        })}
       </ul>
     </>
   );
@@ -84,14 +81,15 @@ export function MarketList() {
 function MarketCard({
   pda,
   market,
-  question,
+  rawQuestion,
 }: {
   pda: PublicKey;
   market: MarketAccount;
-  question: string;
+  rawQuestion: string;
 }) {
   const phase = marketPhase(market);
   const badge = PHASE_BADGE[phase];
+  const { displayQuestion } = parseEmbeddedOptions(rawQuestion);
   return (
     <li>
       <a href={`/markets/${market.marketId}`}>
@@ -101,8 +99,8 @@ function MarketCard({
         >
           {badge.label}
         </span>
-        <span className="category">{CATEGORY_LABELS[market.category]}</span>
-        <h3>{question ? parseEmbeddedOptions(question).displayQuestion : <em>Loading…</em>}</h3>
+        <span className="category">{marketCategoryName(market.category)}</span>
+        <h3>{displayQuestion}</h3>
         <small>
           {phase === "betting"
             ? `Closes ${new Date(Number(market.closeTime) * 1000).toLocaleString()}`
@@ -116,9 +114,16 @@ function MarketCard({
 
 ## Notes
 
-- `MarketAccount` does not include `question`. Call `fetchMarketQuestions(client, markets)`
-  to batch-fetch all questions in one `getMultipleAccountsInfo` RPC call, keyed by
-  market PDA base58. Missing entries default to `""`.
+- **Question text**: current (v3) markets store questions in a separate `MarketQuestion` PDA.
+  Call `fetchMarketQuestions(client, markets)` to batch-fetch them in one RPC call (keyed by PDA base58).
+  Legacy v1/v2 markets have no `MarketQuestion` PDA — their question is in `account.inlineQuestion`.
+  Always use the full fallback chain:
+  ```ts
+  const rawQ = questions.get(pda) || account.inlineQuestion || `Market #${id}`;
+  const { displayQuestion } = parseEmbeddedOptions(rawQ);
+  ```
+- **Option labels**: use `getMarketOptionLabels(account, rawQ)` to get the betting buttons for any market type.
+  Pass the raw question (with `[…]` suffix), not the stripped `displayQuestion`.
 - `useMarkets({ state })` uses a server-side memcmp filter — efficient even with many markets.
 - `useMarkets({ creator })` filters by creator pubkey.
 - Pass `{ creator, state }` together → SDK picks `creator` (more selective). Combine

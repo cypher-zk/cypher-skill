@@ -55,6 +55,9 @@ Construction is synchronous, no RPC fires. Holds:
 | `MAX_OUTCOMES_MULTI` | const | `4` |
 | `MIN_CHALLENGE_PERIOD_SECS` | const | `24 * 3600` (v0.2+) |
 | `MAX_CHALLENGE_PERIOD_SECS` | const | `48 * 3600` (v0.2+) |
+| `MARKET_SIZE_V3` | const | `393` — current layout (question in separate PDA) |
+| `MARKET_SIZE_V2_INLINE_CHALLENGE` | const | `594` — legacy layout with inline question + challenge fields |
+| `MARKET_SIZE_V1_INLINE_NOCHALL` | const | `577` — oldest layout with inline question, no challenge fields |
 | `MarketState` | enum-like | `{ Active: 0, Closed: 1, Resolved: 2, Unresolved: 3, PendingResolution: 4 }` (v0.2+ adds 4) |
 | `MarketType` | enum-like | `{ YesNo: 0, MultiOutcome: 1 }` |
 | `MarketCategory` | enum-like | `{ Crypto: 0, Politics: 1, Sports: 2, Tech: 3, Economy: 4, Culture: 5, Beyond: 6 }` |
@@ -124,6 +127,76 @@ const { protocolFee, lpFee, netAmount } = computeFees(5_000_000n, {
 | `"expired"` | All deadlines elapsed | `adminClaimRemaining` (admin only) |
 | `"cancelled"` | State = Closed (creator cancelled before any bets) | — |
 
+## Question & label helpers
+
+Helpers for safely extracting question text and option labels. Handle both YesNo and
+MultiOutcome markets, and both current (v3) and legacy (v1/v2) account layouts.
+
+| Export | Signature | Returns |
+| --- | --- | --- |
+| `parseEmbeddedOptions(question)` | `(string) => { displayQuestion, optionLabels }` | Strips `[A\|B\|C]` suffix |
+| `getMarketOptionLabels(market, rawQuestion)` | `(MarketAccount, string) => string[]` | Canonical option labels |
+| `formatOutcome(market, rawQuestion)` | `(MarketAccount, string) => string \| null` | Resolved outcome name or null |
+
+### `parseEmbeddedOptions(question: string)`
+
+MultiOutcome markets embed option labels directly in the on-chain question:
+`"Who wins? [Alice|Bob|Carol]"`. Always strip this before rendering.
+
+```ts
+const { displayQuestion, optionLabels } = parseEmbeddedOptions(rawQuestion);
+// displayQuestion: "Who wins?"           ← render this
+// optionLabels: ["Alice", "Bob", "Carol"] ← or call getMarketOptionLabels
+```
+
+### `getMarketOptionLabels(market, rawQuestion)`
+
+Returns the canonical bet-button labels for any market type.
+**Pass the raw question** (with the `[…]` suffix intact), not the stripped `displayQuestion`.
+
+```ts
+const labels = getMarketOptionLabels(market, rawQuestion);
+// YesNo:        ["NO", "YES"]
+// MultiOutcome: ["Alice", "Bob", "Carol"]   — from embedded labels
+//               ["Outcome 1", …, "Outcome N"] — fallback when no suffix
+```
+
+### `formatOutcome(market, rawQuestion)`
+
+Returns a human-readable outcome string once the market is resolved, or `null` when unresolved.
+
+---
+
+## Display name helpers
+
+Use these instead of hardcoding enum number → string mappings.
+
+| Export | Kind | Notes |
+| --- | --- | --- |
+| `MARKET_STATE_NAMES` | `Readonly<Record<number, string>>` | Frozen map |
+| `MARKET_TYPE_NAMES` | `Readonly<Record<number, string>>` | Frozen map |
+| `MARKET_CATEGORY_NAMES` | `Readonly<Record<number, string>>` | Frozen map |
+| `marketStateName(state)` | `(number) => string` | Falls back to `"Unknown(N)"` |
+| `marketTypeName(t)` | `(number) => string` | Falls back to `"Unknown(N)"` |
+| `marketCategoryName(c)` | `(number) => string` | Falls back to `"Unknown(N)"` |
+| `cancelEligibility(market)` | `(Pick<MarketAccount, "state"\|"totalBetsCount">) => { ok, reason }` | Pre-flight before cancel |
+| `marketFormatVersion(accountSize)` | `(number) => "v1" \| "v2" \| "v3" \| null` | From raw byte length |
+| `isLegacyMarketAccount(accountSize)` | `(number) => boolean` | `true` for v1 (577) or v2 (594) |
+
+### `cancelEligibility(market)`
+
+Client-side pre-flight that mirrors the on-chain `cancel_market` requirements.
+Returns `{ ok: true, reason: null }` when cancellable; otherwise `{ ok: false, reason: "..." }`.
+
+```ts
+const { ok, reason } = cancelEligibility(market);
+if (!ok) throw new Error(reason!);
+// "1 bet(s) placed — cannot cancel"
+// "state is Resolved (only Active markets can be cancelled)"
+```
+
+---
+
 ## Errors
 
 | Export | Kind |
@@ -166,13 +239,19 @@ import these directly only when constructing tests.
 | Type | Key fields |
 | --- | --- |
 | `GlobalStateAccount` | `marketCounter`, `protocolFeeRate`, `lpFeeRate`, `acceptedMint`, `admin`, `protocolTreasury` |
-| `MarketAccount` | `marketId`, `marketType`, `numOutcomes`, `state`, `closeTime`, `minBet`, `revealedPool0..3`, `payoutRatio`, `category`, `creator`, `resolver`, `creatorBond`, `bondWithdrawn`, `outcome`, `disputed`, `totalBetsCount`, deadlines |
+| `MarketAccount` | `marketId`, `marketType`, `numOutcomes`, `state`, `closeTime`, `minBet`, `revealedPool0..3`, `payoutRatio`, `category`, `creator`, `resolver`, `creatorBond`, `bondWithdrawn`, `outcome`, `disputed`, `totalBetsCount`, `inlineQuestion`, deadlines |
 | `MarketQuestionAccount` | `question` (UTF-8 string), `questionLen`, `bump` |
 | `EncryptedPositionAccount` | `user`, `market`, `encryptedAmount`, `encryptedSide`, `userPubkey`, `nonce`, `entryOdds`, `netAmount`, `claimed` |
 | `LpPositionAccount` | `lpProvider`, `market`, `liquidityProvided`, `feesClaimed`, `feesClaimedAmount` |
 
 All numerics are `bigint`. All byte arrays are `Uint8Array(32)`.
-`MarketAccount` does NOT include `question` — call `fetchMarketQuestions` or `client.marketQuestions.fetch` to get question text.
+
+**`MarketAccount.inlineQuestion`**: non-empty for v1/v2 legacy accounts (577 or 594 bytes); always `""` for
+current v3 accounts (393 bytes). Current markets store questions in a separate `MarketQuestion` PDA —
+use `fetchMarketQuestions(client, markets)` to batch-fetch those. For the canonical question fallback:
+```ts
+const rawQuestion = questionMap?.get(pda) || account.inlineQuestion || `Market #${account.marketId}`;
+```
 
 ## Memcmp filter helpers
 

@@ -147,6 +147,57 @@ Fetches each tx individually. For high-throughput indexing, use `getSignaturesFo
 
 Typical end-to-end: localnet 5–8s, devnet 15–30s. Bump `timeoutMs` if hitting 120s default.
 
+## Multi-outcome & question display
+
+### Market title shows `[Alice|Bob|Carol]` suffix in the UI
+
+**Cause**: raw question string rendered without stripping the embedded option labels.
+
+**Fix**:
+```ts
+import { parseEmbeddedOptions } from "@cypher-zk/sdk";
+const { displayQuestion } = parseEmbeddedOptions(rawQuestion);
+// render displayQuestion, not rawQuestion
+```
+
+### MultiOutcome market shows 100+ outcomes or buttons labelled "Outcome 1 / Outcome 2 / …"
+
+Two separate causes:
+
+**100+ outcomes** → decoding a v1/v2 legacy account with a raw Anchor coder. The SDK 0.7.8+
+handles v1/v2 transparently via an explicit byte-walker. Upgrade or stop decoding raw bytes manually.
+
+**"Outcome 1..N"** → market was created without the `[A|B|C]` suffix, so `getMarketOptionLabels`
+falls back to generic names. This is expected for older markets. For new markets, embed labels on creation:
+```ts
+const onChainQuestion = `${question} [${options.join("|")}]`;
+```
+
+### Legacy market (v1/v2) shows blank question
+
+**Cause**: `fetchMarketQuestions` returns no entry for v1/v2 markets — they have no `MarketQuestion` PDA.
+
+**Fix**: fall back to `MarketAccount.inlineQuestion`:
+```ts
+const rawQuestion =
+  questionMap?.get(pda) ||
+  account.inlineQuestion ||   // populated for v1/v2; "" for v3
+  `Market #${account.marketId}`;
+```
+
+### `cancelMarket` throws "N bet(s) placed — cannot cancel" or "state is X (only Active markets can be cancelled)"
+
+As of SDK 0.7.8, `cancelMarketAction` runs `cancelEligibility` before sending the tx,
+giving a clean error instead of a raw Anchor `ConstraintSeeds` failure.
+Check eligibility in the UI before even showing the button:
+```ts
+import { cancelEligibility } from "@cypher-zk/sdk";
+const { ok, reason } = cancelEligibility(market);
+// ok === false → show reason to the user, disable the cancel button
+```
+
+---
+
 ## v0.2: claimPayout rejected on a market that's clearly resolved
 
 **Symptom**: `market.state === 4` (PendingResolution) and `claimPayout`

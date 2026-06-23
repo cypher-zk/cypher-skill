@@ -123,6 +123,26 @@ placeBetAction
     position }
 ```
 
+## Market account formats
+
+Three on-chain layouts exist, distinguished by raw account byte length:
+
+| Format | Byte size | Constant | Description |
+| --- | --- | --- | --- |
+| **v3** | 393 | `MARKET_SIZE_V3` | Current. Question in a separate `MarketQuestion` PDA. `inlineQuestion === ""`. |
+| **v2** | 594 | `MARKET_SIZE_V2_INLINE_CHALLENGE` | Legacy. Inline question + challenge fields. |
+| **v1** | 577 | `MARKET_SIZE_V1_INLINE_NOCHALL` | Oldest. Inline question, no challenge fields. |
+
+The SDK automatically handles all three layouts via `gpaFetchMarkets`. You never
+need to branch on byte size in app code — but these constants matter in two places:
+
+1. **Question fallback** — v1/v2 have no `MarketQuestion` PDA. Use `account.inlineQuestion`:
+   ```ts
+   const rawQ = questionMap?.get(pda) || account.inlineQuestion || `Market #${id}`;
+   ```
+2. **Cancel eligibility** — v1/v2 markets can't be cancelled by the current program due
+   to a seed change between deploys. `isLegacyMarketAccount(size)` returns `true` for them.
+
 ## SDK module layout
 
 ```
@@ -135,7 +155,11 @@ placeBetAction
 │   ├── deadlines.ts       marketPhase + projectDeadlines
 │   ├── errors.ts          CypherErrorCode + parseCypherError
 │   ├── client.ts          CypherClient — namespace facade
-│   ├── accounts/          per-account fetch + memcmp filters + layout
+│   ├── accounts/
+│   │   ├── market.ts      MarketAccount + layout decoder (v1/v2/v3)
+│   │   ├── options.ts     parseEmbeddedOptions, getMarketOptionLabels, formatOutcome
+│   │   ├── marketMeta.ts  name helpers, cancelEligibility, format detection
+│   │   └── ...            other account types + memcmp filters
 │   ├── arcium/            x25519 + RescueCipher + queue accounts + callbacks
 │   ├── instructions/      raw TransactionInstruction builders (26 ix)
 │   ├── actions/           high-level flows + progress events

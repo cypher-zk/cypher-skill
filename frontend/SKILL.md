@@ -200,7 +200,8 @@ Stages per action:
 | `resolveMarket` | validating → fetching-state → submitting → awaiting-callback → refetching → done |
 | `claimPayout` / `claimRefund` | validating → fetching-state → submitting → awaiting-callback → refetching → done |
 | `createMarket` / `createMarketMulti` | validating → fetching-state → submitting → refetching → done |
-| `cancelMarket` / `withdrawCreatorFunds` | (no progress callback — single-step) |
+| `cancelMarket` (0.7.8+) | validating → fetching-state → submitting → refetching → done |
+| `withdrawCreatorFunds` | (no progress callback — single-step) |
 
 The callback is invoked synchronously inside the action. A throwing
 callback is swallowed (the SDK never lets a logging callback crash an
@@ -383,6 +384,44 @@ const result = formatOutcome(market, questionText);
 
 Always use `parseEmbeddedOptions(question).displayQuestion` instead of rendering the raw question text directly, otherwise users will see the ugly `[A|B|C]` suffix on MultiOutcome markets.
 
+### Legacy markets and `inlineQuestion`
+
+v1/v2 accounts (created before the current on-chain layout) have no `MarketQuestion` PDA —
+`fetchMarketQuestions` returns no entry for them. Their question text lives in
+`MarketAccount.inlineQuestion`. Use the full fallback chain every time you need question text:
+
+```ts
+const rawQuestion =
+  questionMap?.get(pda.toBase58()) ||
+  account.inlineQuestion ||
+  `Market #${account.marketId}`;
+
+const { displayQuestion } = parseEmbeddedOptions(rawQuestion);
+const optionLabels = getMarketOptionLabels(account, rawQuestion); // pass raw, not stripped
+```
+
+### Creating a MultiOutcome market — embed labels in the question
+
+When creating a MultiOutcome market, write the option labels into the question string so that
+`getMarketOptionLabels` can extract them after the fact:
+
+```ts
+import { MAX_QUESTION_BYTES } from "@cypher-zk/sdk";
+
+const onChainQuestion = `${question} [${options.join("|")}]`;
+if (new TextEncoder().encode(onChainQuestion).length > MAX_QUESTION_BYTES) {
+  throw new Error("Question too long after adding option labels");
+}
+await client.actions.createMarketMulti({
+  creator: wallet.publicKey!,
+  question: onChainQuestion,
+  numOutcomes: options.length,
+  // ...
+});
+```
+
+Without this suffix, `getMarketOptionLabels` falls back to `["Outcome 1", "Outcome 2", …]`.
+
 ## Recipes
 
 Full standalone code samples — copy, adapt, ship:
@@ -403,6 +442,10 @@ Full standalone code samples — copy, adapt, ship:
 - [ ] `CypherClient` is constructed once (memo or module-level), not per render.
 - [ ] Bet/resolve/claim buttons are gated on `marketPhase` matching.
 - [ ] `acceptedMint` is never hard-coded — always read from `GlobalState`.
+- [ ] Question text is always stripped before rendering: `parseEmbeddedOptions(raw).displayQuestion`.
+- [ ] Option labels always come from `getMarketOptionLabels(market, rawQuestion)` — never hardcode `["YES","NO"]` for MultiOutcome markets.
+- [ ] Question fallback chain used: `questionMap.get(pda) || account.inlineQuestion || "Market #N"`.
+- [ ] MultiOutcome creation embeds labels: `\`${question} [${options.join("|")}]\`` before calling `createMarketMulti`.
 
 ## When something breaks
 
