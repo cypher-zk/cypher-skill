@@ -53,9 +53,14 @@ agents tend to hallucinate around:
 
 ## Versioning
 
-This skill targets `@cypher-zk/sdk@0.7.8`. The skill's `metadata.version`
+This skill targets `@cypher-zk/sdk@0.8.3`. The skill's `metadata.version`
 in `SKILL.md` tracks SDK compatibility. Upgrade the skill alongside any
 SDK minor or major bump that changes public API shape.
+
+**0.8.0 breaking change**: positions are now keyed by `(market, user, bet_index)`
+instead of `(market, user)`. A wallet can hold multiple positions on the same
+market. `saveSecret`/`loadSecret` take a `betIndex` arg, and `claimPayout` /
+`claimRefund` / `usePosition` accept an optional `betIndex` (defaults to `0n`).
 
 ## Layout
 

@@ -21,45 +21,70 @@ export function ClaimCard({ marketId }: { marketId: bigint }) {
   const wallet = useWallet();
   const { data: market } = useMarket(marketId);
 
-  // useUserPositions uses positionKeys.byUser internally — auto-invalidated after claim.
+  // A user may hold multiple positions on the same market (one per betIndex).
+  // useUserPositions auto-invalidates after each claim.
   const { data: allPositions } = useUserPositions(wallet.publicKey ?? undefined);
   const targetPda = marketPda(marketId)[0];
-  const position = allPositions
-    ?.find(({ account }) => account.market.equals(targetPda))
-    ?.account ?? null;
+  const unclaimed = (allPositions ?? [])
+    .filter(({ account }) => account.market.equals(targetPda) && !account.claimed);
 
-  const [stage, setStage] = useState<ActionProgressEvent | null>(null);
-  const payout = useClaimPayout({});
-  const refund = useClaimRefund({});
-
-  if (!market || !position) return null;
-  if (position.claimed) return <p>Already claimed.</p>;
-
-  const phase = marketPhase(market);
+  const phase = market ? marketPhase(market) : null;
   const variant: "payout" | "refund" | null =
     phase === "claimable" ? "payout" : phase === "refundable" ? "refund" : null;
 
+  if (!market) return null;
+  if (unclaimed.length === 0) return <p>Nothing to claim.</p>;
   if (!variant) return <p>Nothing to claim right now (phase: {phase}).</p>;
 
+  // Render one button per bet — each claim takes its own betIndex.
+  return (
+    <ul>
+      {unclaimed.map(({ account }) => (
+        <ClaimRow
+          key={account.betIndex.toString()}
+          marketId={marketId}
+          betIndex={account.betIndex}
+          variant={variant}
+          wallet={wallet}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function ClaimRow({
+  marketId, betIndex, variant, wallet,
+}: {
+  marketId: bigint;
+  betIndex: bigint;
+  variant: "payout" | "refund";
+  wallet: ReturnType<typeof useWallet>;
+}) {
+  const [stage, setStage] = useState<ActionProgressEvent | null>(null);
+  const payout = useClaimPayout({});
+  const refund = useClaimRefund({});
   const mutation = variant === "payout" ? payout : refund;
   return (
-    <button
-      disabled={mutation.isPending}
-      onClick={() =>
-        mutation.mutate({
-          payer: wallet.publicKey!,
-          user: wallet.publicKey!,
-          marketId,
-          onProgress: setStage,
-        })
-      }
-    >
-      {mutation.isPending && stage
-        ? labelFor(stage)
-        : variant === "payout"
-          ? "Claim payout"
-          : "Claim refund"}
-    </button>
+    <li>
+      <button
+        disabled={mutation.isPending}
+        onClick={() =>
+          mutation.mutate({
+            payer: wallet.publicKey!,
+            user: wallet.publicKey!,
+            marketId,
+            betIndex,
+            onProgress: setStage,
+          })
+        }
+      >
+        {mutation.isPending && stage
+          ? labelFor(stage)
+          : variant === "payout"
+            ? `Claim payout (bet #${betIndex})`
+            : `Claim refund (bet #${betIndex})`}
+      </button>
+    </li>
   );
 }
 
@@ -97,7 +122,7 @@ async function isLikelyWinner(
   position: EncryptedPositionAccount,
   marketOutcome: number,
 ): Promise<boolean | null> {
-  const secret = loadSecret(position.market);
+  const secret = loadSecret(position.market, position.betIndex);
   if (!secret) return null; // can't tell without the key
   const mxe = await fetchMxePublicKey(client);
   if (!mxe) return null;

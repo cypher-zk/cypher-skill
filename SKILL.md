@@ -15,7 +15,7 @@ description: >
 license: MIT
 metadata:
   author: cypher-zk
-  version: "0.4.1"
+  version: "0.5.0"
   sdk_package: "@cypher-zk/sdk"
   sdk_repo: "https://github.com/cypher-zk/cypher-sdk"
   contract_program_id: "cyphPe923pnPGVXJL3a3P7t2W9mJsagBcg1oeauoh2B"
@@ -28,7 +28,7 @@ on chain via Arcium MPC; the SDK (`@cypher-zk/sdk`) wraps the encrypt →
 submit → await callback → refetch choreography behind one async
 `client.actions.placeBet({...})` call with per-stage progress events.
 
-> **Targets `@cypher-zk/sdk@0.7.8`**. Always verify the actual version the user has installed in their `package.json` or `node_modules`.
+> **Targets `@cypher-zk/sdk@0.8.3`**. Always verify the actual version the user has installed in their `package.json` or `node_modules`. The 0.8.x line introduced multi-bet support (`bet_index`) — pre-0.8 codebases follow different secret-persistence and claim signatures.
 
 ## Your surface
 
@@ -68,7 +68,7 @@ orchestration. If a `CypherError` code appears, look it up in
 
 When acting as an AI assistant using this skill to help a user, follow these strict rules:
 
-1. **IMMEDIATE STARTUP CHECK (Verify Version)**: The very first thing you must do when loaded in a session is to verify the user's installed `@cypher-zk/sdk` version using `view_file` or `grep_search` on their `package.json` (or `node_modules`). The user might be on an older version of the SDK. If their version is older than or differs from the target version (0.7.8), you MUST notify them immediately before writing any code and account for potential breaking changes.
+1. **IMMEDIATE STARTUP CHECK (Verify Version)**: The very first thing you must do when loaded in a session is to verify the user's installed `@cypher-zk/sdk` version using `view_file` or `grep_search` on their `package.json` (or `node_modules`). The user might be on an older version of the SDK. If their version is older than or differs from the target version (0.8.3), you MUST notify them immediately before writing any code and account for potential breaking changes. Particular landmines on pre-0.8.0: positions were keyed by `(market, user)` only (no `bet_index`), `saveSecret(market, secret)` took two args, and `claimPayout`/`claimRefund` did not accept a `betIndex`.
 2. **Strict Web3.js Version**: The Cypher SDK and Anchor fundamentally require `@solana/web3.js` version 1 (e.g., `^1.95.4`). **NEVER** install or suggest `@solana/web3.js` version 2 (`@solana/web3.js@latest`) as it is a complete rewrite and breaks everything.
 3. **Consult Source of Truth**: When in doubt about function signatures, component props, enum values, or data structures, use `view_file` on the actual `node_modules/@cypher-zk/sdk/**/*.d.ts` files. Do not guess or hallucinate the API structure based on generic Solana/Anchor knowledge.
 4. **Trace Implementation**: If a bug occurs, trace the actual SDK source code or view the comprehensive `api-map.md` rather than assuming Anchor IDL behaviors. The Cypher SDK wraps Anchor interactions heavily (especially around Arcium MPC).
@@ -111,9 +111,14 @@ When acting as an AI assistant using this skill to help a user, follow these str
   Use `marketCategoryName(c)`, `marketStateName(s)`, `marketTypeName(t)` from
   the SDK so they stay in sync with the on-chain enum.
 - **NEVER** call `cancelMarketAction` without first checking
-  `cancelEligibility(market)`. As of 0.7.8 the action runs this check
-  internally, but surfacing the reason to the user before sending a tx
-  saves a round-trip.
+  `cancelEligibility(market)`. The action runs this check internally,
+  but surfacing the reason to the user before sending a tx saves a
+  round-trip.
+- **NEVER** assume one position per user per market. Since 0.8.0 the
+  `EncryptedPosition` PDA is seeded by `(market, user, bet_index)` — a
+  wallet can hold many positions on the same market. Key persisted
+  secrets by `(market, betIndex)` and pass `betIndex` to
+  `claimPayout` / `claimRefund` / `usePosition` / `loadSecret`.
 
 ## Core mental model
 
@@ -139,7 +144,7 @@ See [frontend/SKILL.md → Progress events](frontend/SKILL.md#progress-events).
 
 ## Verification checklist
 
-- [ ] Every `placeBet` callsite stores `userKeypair.privateKey`.
+- [ ] Every `placeBet` callsite stores `userKeypair.privateKey` keyed by `(position.market, betIndex)`.
 - [ ] Every event-field access uses camelCase, not snake_case.
 - [ ] Question text rendered via `parseEmbeddedOptions(rawQuestion).displayQuestion` — never raw.
 - [ ] Option labels rendered via `getMarketOptionLabels(market, rawQuestion)` — never hardcoded.

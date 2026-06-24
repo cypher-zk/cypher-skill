@@ -10,7 +10,7 @@ description: >
   contract changes, raw circuit work.
 metadata:
   parent_skill: cypher
-  version: "0.4.1"
+  version: "0.5.0"
 ---
 
 # Cypher SDK — Frontend
@@ -127,10 +127,12 @@ export function BetButton({ marketId }: { marketId: bigint }) {
   const [stage, setStage] = useState<ActionProgressEvent | null>(null);
 
   const placeBet = usePlaceBet({
-    onSuccess: ({ position, userKeypair }) => {
+    onSuccess: ({ position, userKeypair, betIndex }) => {
       // CRITICAL: persist the user's x25519 secret. Without it the user
       // can never decrypt this position to claim a payout later.
-      if (position) saveSecret(position.market, userKeypair.privateKey);
+      // Key by (market, betIndex) — a user can hold multiple positions
+      // on the same market, each with its own secret.
+      if (position) saveSecret(position.market, betIndex, userKeypair.privateKey);
     },
   });
 
@@ -200,7 +202,7 @@ Stages per action:
 | `resolveMarket` | validating → fetching-state → submitting → awaiting-callback → refetching → done |
 | `claimPayout` / `claimRefund` | validating → fetching-state → submitting → awaiting-callback → refetching → done |
 | `createMarket` / `createMarketMulti` | validating → fetching-state → submitting → refetching → done |
-| `cancelMarket` (0.7.8+) | validating → fetching-state → submitting → refetching → done |
+| `cancelMarket` | validating → fetching-state → submitting → refetching → done |
 | `withdrawCreatorFunds` | (no progress callback — single-step) |
 
 The callback is invoked synchronously inside the action. A throwing
@@ -210,26 +212,42 @@ on-chain flow), so you can wire telemetry without try/catch.
 ## Persisting user secrets
 
 `placeBet` returns `userKeypair: { privateKey: Uint8Array (32 bytes),
-publicKey: Uint8Array (32 bytes) }`. The **`privateKey` is the only
-thing that lets the user later decrypt this specific position** — for
-viewing their stake amount, for claiming payouts, etc.
+publicKey: Uint8Array (32 bytes) }` plus `betIndex: bigint`. The
+**`privateKey` is the only thing that lets the user later decrypt this
+specific position** — for viewing their stake amount, for claiming
+payouts, etc.
 
-Recommended pattern: encrypt the secret under the wallet's signature, key
-it by the position's market PDA.
+Each bet on the same market gets its own `betIndex` (`0n`, `1n`, …) and
+its own freshly generated keypair. Key the saved secret by
+`(market, betIndex)` so multiple bets on the same market each round-trip
+correctly.
+
+> **0.8.0 storage-key migration**: pre-0.8 saved one secret per market
+> under a key like `cypher:pos:${market}`. As of 0.8.0 the key is
+> `cypher:pos:${market}:${betIndex}`. Old keys are **invisible** to the
+> new loader — there is no automatic migration. If you have users with
+> pre-0.8 saved keys, either (a) write a one-time migrator that
+> re-writes legacy keys as `…:0` (safe: pre-0.8 only allowed one bet per
+> market, so `betIndex=0n`), or (b) accept that their old keys are lost
+> and surface a "Saved key missing — claim blindly?" UI fallback.
 
 ```ts
 import { PublicKey } from "@solana/web3.js";
 
-export async function saveSecret(market: PublicKey, secret: Uint8Array) {
-  // Simplest pattern: localStorage keyed by market PDA + wallet pubkey.
+export async function saveSecret(
+  market: PublicKey,
+  betIndex: bigint,
+  secret: Uint8Array,
+) {
+  // Simplest pattern: localStorage keyed by market PDA + betIndex.
   // Production: encrypt with a key derived from a wallet signature.
-  const key = `cypher:pos:${market.toBase58()}`;
+  const key = `cypher:pos:${market.toBase58()}:${betIndex}`;
   const hex = Array.from(secret, (b) => b.toString(16).padStart(2, "0")).join("");
   localStorage.setItem(key, hex);
 }
 
-export function loadSecret(market: PublicKey): Uint8Array | null {
-  const hex = localStorage.getItem(`cypher:pos:${market.toBase58()}`);
+export function loadSecret(market: PublicKey, betIndex: bigint): Uint8Array | null {
+  const hex = localStorage.getItem(`cypher:pos:${market.toBase58()}:${betIndex}`);
   if (!hex) return null;
   const arr = new Uint8Array(hex.length / 2);
   for (let i = 0; i < arr.length; i++) {
@@ -245,7 +263,7 @@ To **display** the user's own decrypted position:
 import { createCipher, decryptBetInput, bigIntToLeBytes, fetchMxePublicKey } from "@cypher-zk/sdk";
 
 async function decryptMyPosition(client: CypherClient, position: EncryptedPositionAccount) {
-  const secret = loadSecret(position.market);
+  const secret = loadSecret(position.market, position.betIndex);
   if (!secret) return null; // user lost the key — position is opaque
   const mxe = await fetchMxePublicKey(client);
   if (!mxe) return null;
@@ -275,7 +293,7 @@ single market's question use `client.marketQuestions.fetch(marketPda)`.
 | `useMarket(id)` | `UseQueryResult<MarketAccount \| null>` | — |
 | `useMarkets({ creator?, state? })` | `UseQueryResult<{publicKey, account}[]>` — no question field | — |
 | `useUserPositions(user)` | `UseQueryResult<{publicKey, account}[]>` — all markets | — |
-| `usePosition(market, user)` | `UseQueryResult<EncryptedPositionAccount \| null>` — single pair | — |
+| `usePosition(market, user, betIndex?)` | `UseQueryResult<EncryptedPositionAccount \| null>` — single bet (defaults to `betIndex=0n`) | — |
 | `usePlaceBet()` | `UseMutationResult<PlaceBetResult, Error, PlaceBetInputs>` | `marketKeys.one(marketId)` + `positionKeys.byUser(user)` |
 | `useCreateMarket()` | `UseMutationResult<CreateMarketResult, ...>` | `marketKeys.all` |
 | `useResolveMarket()` | `UseMutationResult<ResolveMarketResult, ...>` | `marketKeys.one(marketId)` |
@@ -293,24 +311,36 @@ manually: `globalStateKeys.all`, `marketKeys.all`, `marketKeys.one(id)`,
 `positionKeys.byUser(pk)`, `positionKeys.forMarket(pk)`,
 `positionKeys.forPair(market, user)`.
 
-### One position per user per market
+### Multiple bets per user per market (via `bet_index`)
 
-The on-chain `EncryptedPosition` PDA is seeded by `["position", market, user_wallet]`.
-A wallet can only hold **one position per market** — a second `place_private_bet_*` call
-will fail with `AccountAlreadyInUse`. Always check before allowing a user to submit:
+The on-chain `EncryptedPosition` PDA is seeded by
+`["position", market, user_wallet, bet_index_u64_le]`. A wallet can hold
+**many positions on the same market** — one per `bet_index`. The SDK's
+`placeBet` action automatically:
+
+- Scans `nextBetIndex(client, market, user)` to find the first free slot.
+- Retries with `betIndex + 1` if two concurrent bets race into the same
+  slot (the SDK detects `AccountAlreadyInUse` and bumps).
+- Returns the assigned `betIndex` in the `PlaceBetResult` — persist this
+  alongside the user's secret so each bet is independently decryptable.
+
+No client-side "do they already have a bet?" check is needed before
+submitting — every call gets its own slot. To list all of a user's bets
+on a market:
 
 ```ts
-import { usePosition } from "@cypher-zk/sdk/react";
+import { useUserPositions } from "@cypher-zk/sdk/react";
 
-// marketPda: PublicKey, userPubkey: PublicKey | null
-const { data: position, isLoading } = usePosition(marketPda, userPubkey, {
-  refetchInterval: 5_000,
-});
-const hasBet = position != null; // null = no position, object = already bet
+const { data: allPositions } = useUserPositions(wallet.publicKey ?? undefined);
+const onThisMarket = allPositions
+  ?.filter(({ account }) => account.market.equals(marketPda))
+  ?? [];
+// Each entry has its own betIndex — render one row per bet.
 ```
 
-Use `isLoading` to disable your submit button while the check is in flight (e.g. on
-page load). Do **not** rely only on local state — it resets on page refresh.
+`usePosition(market, user, betIndex)` still exists for fetching one
+specific bet (defaults to `betIndex=0n`) — useful when you already know
+which bet you're targeting (e.g. from a claim button).
 
 ## Live events
 

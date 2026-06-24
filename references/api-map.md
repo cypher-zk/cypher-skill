@@ -228,9 +228,10 @@ import these directly only when constructing tests.
 | `fetchMarketsByState(client, state)` | `Promise<{publicKey, account}[]>` |
 | `fetchMarketQuestion(client, market)` | `Promise<MarketQuestionAccount \| null>` — single question (v0.2+) |
 | `fetchMarketQuestions(client, markets)` | `Promise<Map<string, string>>` — batch, keyed by market PDA base58 (v0.2+) |
-| `fetchPosition(client, market, user)` | `Promise<EncryptedPositionAccount \| null>` |
-| `fetchUserPositions(client, user)` | `Promise<{publicKey, account}[]>` |
+| `fetchPosition(client, market, user, betIndex?)` | `Promise<EncryptedPositionAccount \| null>` — `betIndex` defaults to `0n` |
+| `fetchUserPositions(client, user)` | `Promise<{publicKey, account}[]>` — all bets across all markets |
 | `fetchPositionsForMarket(client, market)` | `Promise<{publicKey, account}[]>` |
+| `nextBetIndex(client, market, user)` | `Promise<bigint>` — first free `betIndex` slot for this `(market, user)` pair |
 | `fetchLpPosition(client, market, creator)` | `Promise<LpPositionAccount \| null>` |
 | `fetchLpPositionsByProvider(client, provider)` | `Promise<{publicKey, account}[]>` |
 
@@ -241,7 +242,7 @@ import these directly only when constructing tests.
 | `GlobalStateAccount` | `marketCounter`, `protocolFeeRate`, `lpFeeRate`, `acceptedMint`, `admin`, `protocolTreasury` |
 | `MarketAccount` | `marketId`, `marketType`, `numOutcomes`, `state`, `closeTime`, `minBet`, `revealedPool0..3`, `payoutRatio`, `category`, `creator`, `resolver`, `creatorBond`, `bondWithdrawn`, `outcome`, `disputed`, `totalBetsCount`, `inlineQuestion`, deadlines |
 | `MarketQuestionAccount` | `question` (UTF-8 string), `questionLen`, `bump` |
-| `EncryptedPositionAccount` | `user`, `market`, `encryptedAmount`, `encryptedSide`, `userPubkey`, `nonce`, `entryOdds`, `netAmount`, `claimed` |
+| `EncryptedPositionAccount` | `user`, `market`, `encryptedAmount`, `encryptedSide`, `userPubkey`, `nonce`, `entryOdds`, `netAmount`, `betIndex`, `claimed`, `computationQueued`, `bump` |
 | `LpPositionAccount` | `lpProvider`, `market`, `liquidityProvided`, `feesClaimed`, `feesClaimedAmount` |
 
 All numerics are `bigint`. All byte arrays are `Uint8Array(32)`.
@@ -440,7 +441,7 @@ client instance:
 | `useMarket(id, opts?)` | query hook |
 | `useMarkets({ creator?, state? }, opts?)` | query hook |
 | `useUserPositions(user, opts?)` | query hook — all positions for a user across all markets |
-| `usePosition(market, user, opts?)` | query hook — single position for a `(market, user)` pair; returns `null` when no bet exists |
+| `usePosition(market, user, betIndex?, opts?)` | query hook — single position for a `(market, user, betIndex)` tuple (`betIndex` defaults to `0n`); returns `null` when no bet exists |
 | `usePlaceBet(opts?)` | mutation hook |
 | `useCreateMarket(opts?)` | mutation hook |
 | `useResolveMarket(opts?)` | mutation hook |
@@ -451,7 +452,7 @@ client instance:
 | `useFinalizeResolution(opts?)` (v0.2+) | mutation hook |
 | `useAdminOverrideResolution(opts?)` (v0.2+) | mutation hook |
 | `useMarketEvents(opts?)` | subscription hook (returns `CypherEvent[]`) |
-| `globalStateKeys`, `marketKeys`, `positionKeys` | query-key factories — `positionKeys.byUser(pk)`, `positionKeys.forMarket(pk)`, `positionKeys.forPair(market, user)` |
+| `globalStateKeys`, `marketKeys`, `positionKeys` | query-key factories — `positionKeys.byUser(pk)`, `positionKeys.forMarket(pk)`, `positionKeys.forPair(market, user, betIndex?)` |
 | `UseMarketsFilter` | type |
 
 ## Node subpath (`@cypher-zk/sdk/node`)

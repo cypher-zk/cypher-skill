@@ -20,9 +20,13 @@ import { loadSecret } from "./persist-secret";
 export function MyPositionRow({ position }: { position: EncryptedPositionAccount }) {
   const client = useCypherClient();
   const { data: decrypted } = useQuery({
-    queryKey: ["cypher", "decrypt", position.market.toBase58(), position.nonce.toString()],
+    queryKey: [
+      "cypher", "decrypt",
+      position.market.toBase58(),
+      position.betIndex.toString(),
+    ],
     queryFn: async () => {
-      const secret = loadSecret(position.market);
+      const secret = loadSecret(position.market, position.betIndex);
       if (!secret) return null;
       const mxe = await fetchMxePublicKey(client);
       if (!mxe) return null;

@@ -35,11 +35,13 @@ export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
   const [progress, setProgress] = useState<ActionProgressEvent | null>(null);
 
   const placeBet = usePlaceBet({
-    onSuccess: ({ position, userKeypair, signature }) => {
-      if (position) saveSecret(position.market, userKeypair.privateKey);
+    onSuccess: ({ position, userKeypair, betIndex, signature }) => {
+      // Key the secret by (market, betIndex) — a user can place multiple
+      // bets on the same market, each with its own keypair.
+      if (position) saveSecret(position.market, betIndex, userKeypair.privateKey);
       // Optimistically clear the form
       setAmount("5");
-      console.log("Bet placed:", signature);
+      console.log("Bet placed:", signature, "betIndex:", betIndex);
     },
   });
 

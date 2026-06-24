@@ -1,6 +1,6 @@
 {
   "name": "@cypher-zk/skill",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Agent skill for building apps on the Cypher privacy-preserving prediction market with @cypher-zk/sdk.",
   "type": "module",
   "license": "MIT",
@@ -41,7 +41,7 @@
       "frontend/SKILL.md",
       "backend/SKILL.md"
     ],
-    "version": "0.4.1",
-    "sdk": "@cypher-zk/sdk@^0.7.8"
+    "version": "0.5.0",
+    "sdk": "@cypher-zk/sdk@^0.8.3"
   }
 }

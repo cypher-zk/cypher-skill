@@ -37,9 +37,10 @@ GlobalState (PDA ["global_state"])
       ├─► MarketQuestion (PDA ["market_question", market]) — question text
       ├─► MarketVault (PDA ["market_vault", market]) — SPL ATA
       ├─► LPPosition (PDA ["lp-position", market, creator]) — bond + fees
-      └─► EncryptedPosition (PDA ["position", market, user])
+      └─► EncryptedPosition (PDA ["position", market, user, bet_index_u64_le])
             ├─ encryptedAmount/Side · userPubkey · nonce
-            └─ entryOdds · netAmount (public) · claimed
+            └─ entryOdds · netAmount (public) · betIndex · claimed
+            (multiple positions per user per market — one per betIndex)
 
 ArciumSignerAccount (PDA ["ArciumSignerAccount"]) — queue/callback CPI authority
 ```

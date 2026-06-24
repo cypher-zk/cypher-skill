@@ -164,8 +164,8 @@ const { displayQuestion } = parseEmbeddedOptions(rawQuestion);
 
 Two separate causes:
 
-**100+ outcomes** → decoding a v1/v2 legacy account with a raw Anchor coder. The SDK 0.7.8+
-handles v1/v2 transparently via an explicit byte-walker. Upgrade or stop decoding raw bytes manually.
+**100+ outcomes** → decoding a v1/v2 legacy account with a raw Anchor coder. The SDK
+handles v1/v2 transparently via an explicit byte-walker. Stop decoding raw bytes manually.
 
 **"Outcome 1..N"** → market was created without the `[A|B|C]` suffix, so `getMarketOptionLabels`
 falls back to generic names. This is expected for older markets. For new markets, embed labels on creation:
@@ -187,7 +187,7 @@ const rawQuestion =
 
 ### `cancelMarket` throws "N bet(s) placed — cannot cancel" or "state is X (only Active markets can be cancelled)"
 
-As of SDK 0.7.8, `cancelMarketAction` runs `cancelEligibility` before sending the tx,
+`cancelMarketAction` runs `cancelEligibility` before sending the tx,
 giving a clean error instead of a raw Anchor `ConstraintSeeds` failure.
 Check eligibility in the UI before even showing the button:
 ```ts
@@ -195,6 +195,32 @@ import { cancelEligibility } from "@cypher-zk/sdk";
 const { ok, reason } = cancelEligibility(market);
 // ok === false → show reason to the user, disable the cancel button
 ```
+
+---
+
+## Positions tab is empty / `useUserPositions` returns `[]` despite on-chain accounts existing
+
+**Symptom**: `getProgramAccounts` confirms positions exist on-chain
+(visible in the network tab) but `useUserPositions(user)` / `fetchUserPositions`
+returns an empty array.
+
+**Cause**: this almost always means raw Anchor decoding was used and
+choked on the **5-byte trailing padding** the on-chain program reserves
+in `ENCRYPTED_POSITION_SPACE` but the Rust struct doesn't expose as a
+field. The bundled IDL describes a 211-byte account; the deployed
+program writes 208 (pre-`bet_index`) or 216 (post-`bet_index`) bytes.
+Anchor's `program.account.encryptedPosition.fetch()` and
+`coder.accounts.decode("encryptedPosition", data)` both throw
+`"offset is out of range. Received 200"` and consumers swallow it.
+
+**Fix**: use the SDK's high-level accessors (`fetchUserPositions`,
+`fetchPosition`, `useUserPositions`, `usePosition`) — they bypass
+Anchor's coder entirely with a hand-rolled `decodeRawPosition` that
+recognises both real on-chain sizes. **Never** call
+`program.account.encryptedPosition.*` or `coder.accounts.decode(...)`
+for positions directly until the upstream Rust struct gains an explicit
+`_padding: [u8; 5]` field. The same trap exists for `LPPosition`
+(`+ 6 // padding` in `LP_POSITION_SPACE`).
 
 ---
 
