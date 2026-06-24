@@ -204,23 +204,42 @@ const { ok, reason } = cancelEligibility(market);
 (visible in the network tab) but `useUserPositions(user)` / `fetchUserPositions`
 returns an empty array.
 
-**Cause**: this almost always means raw Anchor decoding was used and
-choked on the **5-byte trailing padding** the on-chain program reserves
-in `ENCRYPTED_POSITION_SPACE` but the Rust struct doesn't expose as a
-field. The bundled IDL describes a 211-byte account; the deployed
-program writes 208 (pre-`bet_index`) or 216 (post-`bet_index`) bytes.
-Anchor's `program.account.encryptedPosition.fetch()` and
-`coder.accounts.decode("encryptedPosition", data)` both throw
-`"offset is out of range. Received 200"` and consumers swallow it.
+**Root cause (two-part bug, both fixed)**:
 
-**Fix**: use the SDK's high-level accessors (`fetchUserPositions`,
-`fetchPosition`, `useUserPositions`, `usePosition`) — they bypass
-Anchor's coder entirely with a hand-rolled `decodeRawPosition` that
-recognises both real on-chain sizes. **Never** call
-`program.account.encryptedPosition.*` or `coder.accounts.decode(...)`
-for positions directly until the upstream Rust struct gains an explicit
-`_padding: [u8; 5]` field. The same trap exists for `LPPosition`
-(`+ 6 // padding` in `LP_POSITION_SPACE`).
+1. **Padding wasn't in the IDL** (pre-program upgrade): on-chain
+   `ENCRYPTED_POSITION_SPACE` reserved 5 trailing padding bytes but the
+   Rust struct didn't declare them, so the IDL was 5 bytes short. Anchor's
+   coder threw `"offset is out of range. Received 200"` on every 216-byte
+   account. Same shape for `LPPosition` (6-byte tail).
+2. **Anchor's `.all()` is all-or-nothing** (pre-SDK 0.8.5): devnet has
+   two live `EncryptedPosition` layouts — current (216 bytes, with
+   `bet_index`) and legacy (208 bytes, pre-`bet_index`). Even after the
+   IDL was fixed, `program.account.encryptedPosition.all(...)` would
+   throw on the first legacy account it encountered and abort the entire
+   query — turning "wallet has 1 current + 15 legacy positions" into
+   "wallet has 0 positions" silently.
+
+**Fix landed in SDK `0.8.5` + program upgrade**:
+
+- Rust structs now declare `pub _padding: [u8; 5]`
+  (and `[u8; 6]` for `LPPosition`) as the final field; the IDL describes
+  the full account layout.
+- `fetchPosition` / `fetchUserPositions` / `fetchPositionsForMarket` now
+  go through raw `getProgramAccounts` + per-account size-aware decode:
+  Anchor's `coder.accounts.decode("encryptedPosition", buf)` for 216-byte
+  accounts, hand-walked borsh for 208-byte legacy accounts (`betIndex`
+  defaults to `0n`), and orphan sizes are skipped. Both layouts coexist
+  in one query.
+
+**If you see this symptom on `>=0.8.5`**:
+
+1. Confirm the wallet actually owns positions: `getProgramAccounts` with
+   the `EncryptedPosition` discriminator + a `memcmp` on offset 8 for the
+   user pubkey. Account sizes should be 208 or 216 — anything else is the
+   next layout bump and needs a SDK update.
+2. Stale bundled IDL — re-sync with `bun sync:idl` from the SDK root.
+3. React Query cached the empty result before the wallet connected —
+   invalidate `positionKeys.byUser(user)` after wallet connection.
 
 ---
 

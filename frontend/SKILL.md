@@ -10,7 +10,7 @@ description: >
   contract changes, raw circuit work.
 metadata:
   parent_skill: cypher
-  version: "0.5.0"
+  version: "0.5.1"
 ---
 
 # Cypher SDK — Frontend

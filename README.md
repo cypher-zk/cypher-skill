@@ -53,7 +53,7 @@ agents tend to hallucinate around:
 
 ## Versioning
 
-This skill targets `@cypher-zk/sdk@0.8.3`. The skill's `metadata.version`
+This skill targets `@cypher-zk/sdk@0.8.5`. The skill's `metadata.version`
 in `SKILL.md` tracks SDK compatibility. Upgrade the skill alongside any
 SDK minor or major bump that changes public API shape.
 
@@ -61,6 +61,13 @@ SDK minor or major bump that changes public API shape.
 instead of `(market, user)`. A wallet can hold multiple positions on the same
 market. `saveSecret`/`loadSecret` take a `betIndex` arg, and `claimPayout` /
 `claimRefund` / `usePosition` accept an optional `betIndex` (defaults to `0n`).
+
+**0.8.5 fix**: `useUserPositions` / `fetchUserPositions` now decode mixed
+legacy (208-byte, pre-`bet_index`) and current (216-byte, post-`bet_index`)
+`EncryptedPosition` accounts in the same query. Earlier versions used
+Anchor's all-or-nothing `.all()` which threw on the first legacy account
+and silently returned `[]`. Wallets that bet across the `bet_index`
+upgrade boundary need `>=0.8.5` to see their full history.
 
 ## Layout
 
