@@ -42,6 +42,6 @@
       "backend/SKILL.md"
     ],
     "version": "0.5.1",
-    "sdk": "@cypher-zk/sdk@^0.8.5"
+    "sdk": "@cypher-zk/sdk@^0.8.6"
   }
 }

@@ -53,7 +53,7 @@ agents tend to hallucinate around:
 
 ## Versioning
 
-This skill targets `@cypher-zk/sdk@0.8.5`. The skill's `metadata.version`
+This skill targets `@cypher-zk/sdk@0.8.6`. The skill's `metadata.version`
 in `SKILL.md` tracks SDK compatibility. Upgrade the skill alongside any
 SDK minor or major bump that changes public API shape.
 

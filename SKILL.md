@@ -28,7 +28,7 @@ on chain via Arcium MPC; the SDK (`@cypher-zk/sdk`) wraps the encrypt →
 submit → await callback → refetch choreography behind one async
 `client.actions.placeBet({...})` call with per-stage progress events.
 
-> **Targets `@cypher-zk/sdk@0.8.5`**. Always verify the actual version the user has installed in their `package.json` or `node_modules`. The 0.8.x line introduced multi-bet support (`bet_index`) — pre-0.8 codebases follow different secret-persistence and claim signatures. **0.8.5** fixes the position-decode bug where `useUserPositions` silently returned `[]` whenever the wallet had any pre-`bet_index` (208-byte) accounts alongside current (216-byte) ones — pin `>=0.8.5` if you see an empty Positions tab despite on-chain accounts existing.
+> **Targets `@cypher-zk/sdk@0.8.6`**. Always verify the actual version the user has installed in their `package.json` or `node_modules`. The 0.8.x line introduced multi-bet support (`bet_index`) — pre-0.8 codebases follow different secret-persistence and claim signatures. **0.8.5** fixes the position-decode bug where `useUserPositions` silently returned `[]` whenever the wallet had any pre-`bet_index` (208-byte) accounts alongside current (216-byte) ones — pin `>=0.8.5` if you see an empty Positions tab despite on-chain accounts existing. **0.8.6** (breaking for raw-ix callers only): `placePrivateBet*Ix` dropped the `betIndex` arg in favor of a new on-chain `user_state` PDA that auto-increments. The SDK adds the `user_state` account and reads `next_bet_index` automatically; raw-ix callers must include it. `placeBetAction` / `usePlaceBet` callers are unaffected.
 
 ## Your surface
 
