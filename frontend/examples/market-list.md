@@ -2,13 +2,12 @@
 
 ```tsx
 "use client";
-import { useState, useEffect } from "react";
-import { useMarkets, useCypherClient } from "@cypher-zk/sdk/react";
+import { useMemo, useState } from "react";
+import { useMarkets, useMarketQuestions } from "@cypher-zk/sdk/react";
 import {
   MarketState,
   marketPhase,
   marketCategoryName,
-  fetchMarketQuestions,
   parseEmbeddedOptions,
   type MarketPhase,
   type MarketAccount,
@@ -28,17 +27,16 @@ const PHASE_BADGE: Record<MarketPhase, { color: string; label: string }> = {
 };
 
 export function MarketList() {
-  const client = useCypherClient();
   const [stateFilter, setStateFilter] = useState<number | undefined>(
     MarketState.Active,
   );
   const { data: markets, isLoading } = useMarkets({ state: stateFilter });
-  const [questions, setQuestions] = useState<Map<string, string>>(new Map());
 
-  useEffect(() => {
-    if (!markets?.length) return;
-    fetchMarketQuestions(client, markets).then(setQuestions);
-  }, [client, markets]);
+  // 0.8.8+: batched + retried question fetch. Memoize the input so
+  // TanStack Query sees a stable array reference (otherwise the queryKey
+  // churns on every render).
+  const marketsForQuestions = useMemo(() => markets ?? [], [markets]);
+  const { data: questions } = useMarketQuestions(marketsForQuestions);
 
   if (isLoading) return <p>Loading markets…</p>;
   if (!markets) return null;
@@ -61,7 +59,7 @@ export function MarketList() {
         {markets.map(({ publicKey, account }) => {
           // Full fallback chain: v3 PDA question → v1/v2 inlineQuestion → placeholder
           const rawQuestion =
-            questions.get(publicKey.toBase58()) ||
+            questions?.get(publicKey.toBase58()) ||
             account.inlineQuestion ||
             `Market #${account.marketId}`;
           return (
@@ -115,18 +113,47 @@ function MarketCard({
 ## Notes
 
 - **Question text**: current (v3) markets store questions in a separate `MarketQuestion` PDA.
-  Call `fetchMarketQuestions(client, markets)` to batch-fetch them in one RPC call (keyed by PDA base58).
-  Legacy v1/v2 markets have no `MarketQuestion` PDA — their question is in `account.inlineQuestion`.
-  Always use the full fallback chain:
+  Use `useMarketQuestions(markets)` (0.8.8+) — it routes through the SDK's batched RPC layer
+  (chunked at Solana's 100-key cap, with retries), so it scales past the limit where the older
+  `fetchMarketQuestions` direct call started failing. Legacy v1/v2 markets have no
+  `MarketQuestion` PDA — their question is in `account.inlineQuestion`. Always use the full
+  fallback chain:
   ```ts
-  const rawQ = questions.get(pda) || account.inlineQuestion || `Market #${id}`;
+  const rawQ = questions?.get(pda) || account.inlineQuestion || `Market #${id}`;
   const { displayQuestion } = parseEmbeddedOptions(rawQ);
   ```
 - **Option labels**: use `getMarketOptionLabels(account, rawQ)` to get the betting buttons for any market type.
   Pass the raw question (with `[…]` suffix), not the stripped `displayQuestion`.
 - `useMarkets({ state })` uses a server-side memcmp filter — efficient even with many markets.
 - `useMarkets({ creator })` filters by creator pubkey.
+- `useMarkets({ ids })` (0.8.8+) — preferred for paginated browsing once a deployment has more
+  than a few hundred markets. Fetches only the page you're rendering instead of pulling the
+  full program payload via `getProgramAccounts`.
 - Pass `{ creator, state }` together → SDK picks `creator` (more selective). Combine
-  manually if you need both.
+  manually if you need both. `ids` takes precedence over both.
 - For "my markets across all states", fetch `useMarkets({ creator: wallet.publicKey })`
   then filter client-side.
+
+## Paginated variant (preferred at scale)
+
+When the program has hundreds of markets, replace `useMarkets({ state })` with the
+`ids` filter — fetch only the page you render:
+
+```tsx
+const [start, setStart] = useState(0n);
+const PAGE = 20n;
+
+const ids = useMemo(
+  () => Array.from({ length: Number(PAGE) }, (_, i) => start + BigInt(i)),
+  [start],
+);
+const marketsFilter = useMemo(() => ({ ids }), [ids]);
+const { data: markets } = useMarkets(marketsFilter);
+
+const marketsForQuestions = useMemo(() => markets ?? [], [markets]);
+const { data: questions } = useMarketQuestions(marketsForQuestions);
+```
+
+The memoization is load-bearing: a fresh filter object every render churns
+TanStack Query's `queryKey` derivation and can surface the
+"state update on a component that hasn't mounted yet" warning in strict mode.

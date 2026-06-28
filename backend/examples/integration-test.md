@@ -26,7 +26,6 @@ import {
   MarketCategory,
   keypairToWallet,
   readonlyWallet,
-  fetchMarketQuestions,
   type ActionProgressEvent,
 } from "@cypher-zk/sdk";
 
@@ -93,11 +92,13 @@ describe.skipIf(!DEVNET || !WRITE_KP)("devnet e2e: create YesNo market", () => {
     expect(mq!.question).toBe(QUESTION);
   }, 15_000);
 
-  test("fetchMarketQuestions batch includes the new market", async () => {
-    const markets = await client.markets.all();
-    const entry = markets.find((m) => m.account.marketId === createdMarketId)!;
-    const map = await fetchMarketQuestions(client, [entry]);
-    expect(map.get(entry.publicKey.toBase58())).toBe(QUESTION);
+  test("marketQuestions.fetchMany batch includes the new market", async () => {
+    // 0.8.8+: use the client namespace (routes through the chunked +
+    // retried RPC layer). Equivalent to the loose `fetchMarketQuestions`
+    // helper, just exposed on the client surface.
+    const entry = { publicKey: createdMarketPda };
+    const map = await client.marketQuestions.fetchMany([entry]);
+    expect(map.get(createdMarketPda.toBase58())).toBe(QUESTION);
   }, 15_000);
 
   test.skipIf(!PLACE_BET)("placeBet on YES and verify position", async () => {

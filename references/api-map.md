@@ -15,21 +15,25 @@ JSDoc.
 | `CypherClient` | class | `src/client.ts` |
 | `CypherClientOptions` | type | `src/client.ts` |
 
-### `new CypherClient({ connection, wallet, cluster?, commitment?, programId?, confirmOptions? })`
+### `new CypherClient({ connection, wallet, cluster?, commitment?, programId?, tokenProgram?, confirmOptions?, rpcOptions? })`
 
 ```ts
 const client = new CypherClient({
   connection: new Connection("https://api.devnet.solana.com"),
   wallet: keypairToWallet(kp),
   cluster: "devnet", // or "mainnet" / "localnet" / a full ClusterConfig
+  // 0.8.8+ — tune bulk RPC reads. Defaults survive free-tier RPCs;
+  // raise `concurrency` on paid plans (Helius / Triton) for snappier
+  // list views.
+  rpcOptions: { concurrency: 10 },
 });
 ```
 
 Construction is synchronous, no RPC fires. Holds:
-- `connection`, `wallet`, `provider`, `program`, `programId`, `cluster`
-- Namespaces: `globalState`, `markets`, `positions`, `lpPositions`,
-  `events`, `actions`, `admin`, `compDefs`, `marketIx`, `bets`,
-  `resolveIx`, `claimIx`
+- `connection`, `wallet`, `provider`, `program`, `programId`, `cluster`, `rpcOptions` (resolved)
+- Namespaces: `globalState`, `markets`, `marketQuestions`, `positions`,
+  `lpPositions`, `events`, `actions`, `admin`, `compDefs`, `marketIx`,
+  `bets`, `resolveIx`, `claimIx`, `resolutionIx`
 
 ## Cluster + constants
 
@@ -83,7 +87,20 @@ All return `[PublicKey, bumpSeed]`. All accept an optional
 | --- | --- |
 | `Wallet` | type |
 | `keypairToWallet(keypair)` | `(Keypair) => Wallet` |
-| `readonlyWallet(publicKey)` | `(PublicKey) => Wallet` (throws on sign) |
+| `readonlyWallet(publicKey)` | `(PublicKey) => Wallet` (throws `ReadonlyWalletError` on sign) |
+| `ReadonlyWalletError` | class — `extends Error`; `code === "READONLY_WALLET"`, `name === "ReadonlyWalletError"` (0.8.9+) |
+
+## RPC layer (0.8.8+)
+
+The SDK chunks bulk reads at Solana's 100-key cap, runs with bounded
+concurrency, and retries transient errors with exponential backoff. Tune
+globally via `CypherClientOptions.rpcOptions`, or override per call.
+
+| Export | Kind | Use |
+| --- | --- | --- |
+| `BatchOptions` | type | `{ chunkSize, concurrency, retries, retryBaseMs, commitment? }` |
+| `DEFAULT_BATCH_OPTIONS` | const | `{ chunkSize: 100, concurrency: 5, retries: 3, retryBaseMs: 200 }` |
+| `batchedGetMultipleAccountsInfo(connection, pubkeys, overrides?)` | function | Drop-in replacement for `connection.getMultipleAccountsInfo` past 100 keys |
 
 ## Fees
 
@@ -223,11 +240,12 @@ import these directly only when constructing tests.
 | --- | --- |
 | `fetchGlobalState(client)` | `Promise<GlobalStateAccount>` |
 | `fetchMarket(client, idOrPda)` | `Promise<MarketAccount \| null>` |
-| `fetchAllMarkets(client)` | `Promise<{publicKey, account}[]>` |
+| `fetchAllMarkets(client)` | `Promise<{publicKey, account}[]>` — full program payload; prefer `fetchMarketsByIds` for paginated views |
 | `fetchMarketsByCreator(client, creator)` | `Promise<{publicKey, account}[]>` |
 | `fetchMarketsByState(client, state)` | `Promise<{publicKey, account}[]>` |
+| `fetchMarketsByIds(client, ids, overrides?)` | `Promise<{publicKey, account}[]>` — chunked + retried; ids may be `bigint`, `number`, or `PublicKey` (0.8.8+) |
 | `fetchMarketQuestion(client, market)` | `Promise<MarketQuestionAccount \| null>` — single question (v0.2+) |
-| `fetchMarketQuestions(client, markets)` | `Promise<Map<string, string>>` — batch, keyed by market PDA base58 (v0.2+) |
+| `fetchMarketQuestions(client, markets, overrides?)` | `Promise<Map<string, string>>` — batched + retried via 0.8.8+ RPC layer; keyed by market PDA base58 |
 | `fetchPosition(client, market, user, betIndex?)` | `Promise<EncryptedPositionAccount \| null>` — `betIndex` defaults to `0n` |
 | `fetchUserPositions(client, user)` | `Promise<{publicKey, account}[]>` — all bets across all markets |
 | `fetchPositionsForMarket(client, market)` | `Promise<{publicKey, account}[]>` |
@@ -249,7 +267,7 @@ All numerics are `bigint`. All byte arrays are `Uint8Array(32)`.
 
 **`MarketAccount.inlineQuestion`**: non-empty for v1/v2 legacy accounts (577 or 594 bytes); always `""` for
 current v3 accounts (393 bytes). Current markets store questions in a separate `MarketQuestion` PDA —
-use `fetchMarketQuestions(client, markets)` to batch-fetch those. For the canonical question fallback:
+use `client.marketQuestions.fetchMany(markets)` (or the React `useMarketQuestions(markets)` hook) to batch-fetch those. For the canonical question fallback:
 ```ts
 const rawQuestion = questionMap?.get(pda) || account.inlineQuestion || `Market #${account.marketId}`;
 ```
@@ -417,8 +435,8 @@ client instance:
 | Namespace | Methods |
 | --- | --- |
 | `client.globalState` | `fetch({refresh?})`, `invalidate()` |
-| `client.markets` | `fetch(id)`, `fetchByPda(pda)`, `all()`, `byCreator(pk)`, `byState(n)` |
-| `client.marketQuestions` | `fetch(marketPda)` → `MarketQuestionAccount \| null` |
+| `client.markets` | `fetch(id)`, `fetchByPda(pda)`, `all()`, `byCreator(pk)`, `byState(n)`, `byIds(ids)` (0.8.8+ — batched + retried, preferred for paginated views) |
+| `client.marketQuestions` | `fetch(marketPda)` → `MarketQuestionAccount \| null`, `fetchMany(markets)` → `Map<base58, string>` (0.8.8+ — batched + retried) |
 | `client.positions` | `fetch(market, user)`, `byUser(user)`, `forMarket(market)` |
 | `client.lpPositions` | `fetch(market, creator)`, `byProvider(pk)` |
 | `client.events` | `subscribeAll`, `subscribe`, `onMarketCreated`, …, `pollEvents`, `parseLogs` |
@@ -439,7 +457,8 @@ client instance:
 | `useCypherClient()` | hook — read the client (throws outside provider) |
 | `useGlobalState(opts?)` | query hook |
 | `useMarket(id, opts?)` | query hook |
-| `useMarkets({ creator?, state? }, opts?)` | query hook |
+| `useMarkets({ creator?, state?, ids? }, opts?)` | query hook — `ids` filter (0.8.8+) routes to `client.markets.byIds`; preferred over the no-filter form once the program has more than a few hundred markets |
+| `useMarketQuestions(markets, opts?)` | query hook (0.8.8+) — batch-fetches question text for a list of markets; returns `Map<marketPdaBase58, string>`; 60s stale time |
 | `useUserPositions(user, opts?)` | query hook — all positions for a user across all markets |
 | `usePosition(market, user, betIndex?, opts?)` | query hook — single position for a `(market, user, betIndex)` tuple (`betIndex` defaults to `0n`); returns `null` when no bet exists |
 | `usePlaceBet(opts?)` | mutation hook |
@@ -452,8 +471,8 @@ client instance:
 | `useFinalizeResolution(opts?)` (v0.2+) | mutation hook |
 | `useAdminOverrideResolution(opts?)` (v0.2+) | mutation hook |
 | `useMarketEvents(opts?)` | subscription hook (returns `CypherEvent[]`) |
-| `globalStateKeys`, `marketKeys`, `positionKeys` | query-key factories — `positionKeys.byUser(pk)`, `positionKeys.forMarket(pk)`, `positionKeys.forPair(market, user, betIndex?)` |
-| `UseMarketsFilter` | type |
+| `globalStateKeys`, `marketKeys`, `marketQuestionKeys`, `positionKeys` | query-key factories — `marketKeys.byIds(ids)` and `marketQuestionKeys.byMarkets(pdas)` added 0.8.8+; `positionKeys.byUser(pk)`, `positionKeys.forMarket(pk)`, `positionKeys.forPair(market, user, betIndex?)` |
+| `UseMarketsFilter` | type — `{ creator?, state?, ids? }` |
 
 ## Node subpath (`@cypher-zk/sdk/node`)
 

@@ -51,6 +51,10 @@ function CypherShell({ children }: { children: React.ReactNode }) {
       connection: new Connection(RPC, "confirmed"),
       wallet: wallet as never,
       cluster: "devnet",
+      // 0.8.8+ — tune the SDK's bulk RPC reads. Defaults survive
+      // free-tier RPCs; raise `concurrency` on paid plans (Helius /
+      // Triton) for snappier list views.
+      // rpcOptions: { concurrency: 10 },
     });
   // wallet.signTransaction is a new function ref every render on most adapters
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,10 +150,12 @@ export default async function MarketsPage() {
 }
 ```
 
-`readonlyWallet` throws on `signTransaction`/`signAllTransactions`, so
-the server never accidentally signs. Pass the prefetched data into a
-"use client" component that takes over with `useMarkets()` for live
-updates.
+`readonlyWallet` throws a typed `ReadonlyWalletError` (0.8.9+) on
+`signTransaction`/`signAllTransactions`, so the server never
+accidentally signs — and any mutation that slips into a server path
+surfaces a recognizable error rather than a silent failure. Pass the
+prefetched data into a "use client" component that takes over with
+`useMarkets()` for live updates.
 
 ## Don't put the SDK in `app/api/*.ts`
 

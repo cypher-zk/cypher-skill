@@ -137,7 +137,34 @@ spl-token mint <ACCEPTED_MINT> 100 --url devnet
 
 ### `useMarkets()` slow
 
-`getProgramAccounts` is slow on public RPCs. Use Helius/QuickNode/Triton, filter aggressively (`{ state: MarketState.Active }`), or move to an off-chain indexer.
+`getProgramAccounts` is slow on public RPCs. Use Helius/QuickNode/Triton, filter aggressively (`{ state: MarketState.Active }`), or pass `{ ids }` to fetch only the page you're rendering (0.8.8+). For very large deployments, move to an off-chain indexer.
+
+### `getMultipleAccountsInfo` rejects with "Too many account keys" or "input too long"
+
+**Cause**: SDK < 0.8.8 calls `connection.getMultipleAccountsInfo` directly with the full pubkey list. Solana caps that at 100 keys per request, so once a deployment has more than ~100 markets, `fetchMarketQuestions` blows past it.
+
+**Fix**: upgrade to `@cypher-zk/sdk@^0.8.8` — the SDK now chunks bulk reads at 100, runs with bounded concurrency, and retries transient errors. The high-level entry points are `client.markets.byIds(ids)`, `client.marketQuestions.fetchMany(markets)`, and the React `useMarketQuestions(markets)` hook. Tune via `CypherClientOptions.rpcOptions = { concurrency, retries, … }`.
+
+### Mutation toast says "readonlyWallet cannot sign transactions" or "Wallet is read-only"
+
+**Cause**: a write hook (`usePlaceBet`, `useClaimPayout`, …) fired against a `CypherClient` whose wallet adapter hadn't finished hydrating. The provider was still on its `readonlyWallet` fallback.
+
+**Fix**: gate the calling button on the wallet adapter's "ready" state. With Privy that means `usePrivy().ready && authenticated && useWallets().wallets[0]`. In `onError`, detect the case with the typed error (0.8.9+) and show a connect-wallet prompt:
+```ts
+import { ReadonlyWalletError } from "@cypher-zk/sdk";
+
+usePlaceBet({
+  onError: (err) => {
+    if (err instanceof ReadonlyWalletError) {
+      toast.error("Connect your wallet to place a bet.");
+      return;
+    }
+    toast.error(err.message);
+  },
+});
+```
+
+On older SDKs you'll see the generic `Error("readonlyWallet cannot sign transactions")` — match on the substring as a fallback.
 
 ### `pollEvents` slow
 

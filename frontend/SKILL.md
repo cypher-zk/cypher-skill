@@ -282,16 +282,19 @@ TanStack Query `UseQueryResult` shape; each mutation returns
 keys on success.
 
 `useMarkets()` returns `MarketAccount` objects which have **no `question`
-field**. After the query resolves, batch-fetch questions with
-`fetchMarketQuestions(client, markets)` from `@cypher-zk/sdk`. For a
-single market's question use `client.marketQuestions.fetch(marketPda)`.
+field**. After the query resolves, batch-fetch questions with the
+`useMarketQuestions(markets)` hook (0.8.8+) — it routes through the
+SDK's chunked RPC layer so it scales past Solana's 100-key
+`getMultipleAccountsInfo` cap. For a single market's question use
+`client.marketQuestions.fetch(marketPda)`.
 
 | Hook | Returns | Auto-invalidates on success |
 | --- | --- | --- |
 | `useCypherClient()` | `CypherClient` | — |
 | `useGlobalState()` | `UseQueryResult<GlobalStateAccount>` | — |
 | `useMarket(id)` | `UseQueryResult<MarketAccount \| null>` | — |
-| `useMarkets({ creator?, state? })` | `UseQueryResult<{publicKey, account}[]>` — no question field | — |
+| `useMarkets({ creator?, state?, ids? })` | `UseQueryResult<{publicKey, account}[]>` — no question field. `ids` filter (0.8.8+) routes to `client.markets.byIds` for paginated views | — |
+| `useMarketQuestions(markets)` (0.8.8+) | `UseQueryResult<Map<base58, string>>` — batched + retried | — |
 | `useUserPositions(user)` | `UseQueryResult<{publicKey, account}[]>` — all markets | — |
 | `usePosition(market, user, betIndex?)` | `UseQueryResult<EncryptedPositionAccount \| null>` — single bet (defaults to `betIndex=0n`) | — |
 | `usePlaceBet()` | `UseMutationResult<PlaceBetResult, Error, PlaceBetInputs>` | `marketKeys.one(marketId)` + `positionKeys.byUser(user)` |
@@ -307,7 +310,8 @@ single market's question use `client.marketQuestions.fetch(marketPda)`.
 
 Query-key factories you can hand to `queryClient.invalidateQueries()`
 manually: `globalStateKeys.all`, `marketKeys.all`, `marketKeys.one(id)`,
-`marketKeys.byCreator(pk)`, `marketKeys.byState(n)`,
+`marketKeys.byCreator(pk)`, `marketKeys.byState(n)`, `marketKeys.byIds(ids)`
+(0.8.8+), `marketQuestionKeys.byMarkets(pdas)` (0.8.8+),
 `positionKeys.byUser(pk)`, `positionKeys.forMarket(pk)`,
 `positionKeys.forPair(market, user)`.
 
@@ -438,7 +442,7 @@ Always use `parseEmbeddedOptions(question).displayQuestion` instead of rendering
 ### Legacy markets and `inlineQuestion`
 
 v1/v2 accounts (created before the current on-chain layout) have no `MarketQuestion` PDA —
-`fetchMarketQuestions` returns no entry for them. Their question text lives in
+`useMarketQuestions` / `fetchMany` / `fetchMarketQuestions` return no entry for them. Their question text lives in
 `MarketAccount.inlineQuestion`. Use the full fallback chain every time you need question text:
 
 ```ts

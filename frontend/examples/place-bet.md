@@ -23,7 +23,7 @@ import { saveSecret } from "./persist-secret";
 
 interface PlaceBetCardProps {
   marketId: bigint;
-  question?: string; // from fetchMarketQuestions — MarketAccount has no question field
+  question?: string; // from useMarketQuestions / client.marketQuestions — MarketAccount has no question field
 }
 
 export function PlaceBetCard({ marketId, question }: PlaceBetCardProps) {
@@ -181,7 +181,23 @@ The button label streams through the stages:
 | `WrongMint` | User's ATA is the wrong mint | Show "Please use USDC/CSDC" |
 | Computation timeout | Arcium cluster slow | Surface "Network busy, try again" |
 | User rejected signature | Wallet rejection | Silent — `error.message` includes "User rejected" |
+| `ReadonlyWalletError` (0.8.9+) | Mutation fired while the client was still on the `readonlyWallet` fallback (wallet not yet hydrated). | Show "Connect your wallet to place a bet". Gate the button on adapter readiness so it shouldn't reach this state. |
 
 `parseCypherError` extracts the `CypherErrorCode` from Anchor's error
 wrapper so you can branch on `parsed?.name` instead of substring
-matching.
+matching. Handle `ReadonlyWalletError` separately:
+
+```ts
+import { ReadonlyWalletError, parseCypherError } from "@cypher-zk/sdk";
+
+const placeBet = usePlaceBet({
+  onError: (err) => {
+    if (err instanceof ReadonlyWalletError) {
+      toast.error("Connect your wallet to place a bet.");
+      return;
+    }
+    const parsed = parseCypherError(err);
+    toast.error(parsed?.msg ?? err.message);
+  },
+});
+```

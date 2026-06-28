@@ -16,7 +16,6 @@ import {
   marketPhase,
   MarketType,
   parseCypherError,
-  fetchMarketQuestions,
 } from "@cypher-zk/sdk";
 
 const RESOLVER_PATH = process.env.RESOLVER_KEYPAIR!;
@@ -38,7 +37,7 @@ const client = new CypherClient({
  * if the answer isn't available yet (the bot will retry next tick).
  *
  * Note: MarketAccount has no question field. Pass the question string
- * from a separate fetchMarketQuestions call (see tick() below).
+ * from a separate `client.marketQuestions.fetchMany` call (see tick() below).
  */
 async function fetchOutcome(market: {
   marketId: bigint;
@@ -60,8 +59,9 @@ async function tick() {
   );
   if (!resolverMarkets.length) return;
 
-  // Batch-fetch question text (one RPC call for all markets)
-  const questions = await fetchMarketQuestions(client, resolverMarkets);
+  // Batch-fetch question text. 0.8.8+ chunks at Solana's 100-key cap,
+  // retries on transient errors, and runs with bounded concurrency.
+  const questions = await client.marketQuestions.fetchMany(resolverMarkets);
 
   for (const { publicKey, account } of resolverMarkets) {
     const question = questions.get(publicKey.toBase58()) ?? "";

@@ -15,7 +15,7 @@ description: >
 license: MIT
 metadata:
   author: cypher-zk
-  version: "0.5.1"
+  version: "0.6.0"
   sdk_package: "@cypher-zk/sdk"
   sdk_repo: "https://github.com/cypher-zk/cypher-sdk"
   contract_program_id: "cyphPe923pnPGVXJL3a3P7t2W9mJsagBcg1oeauoh2B"
@@ -28,7 +28,7 @@ on chain via Arcium MPC; the SDK (`@cypher-zk/sdk`) wraps the encrypt →
 submit → await callback → refetch choreography behind one async
 `client.actions.placeBet({...})` call with per-stage progress events.
 
-> **Targets `@cypher-zk/sdk@0.8.7`**. Always verify the actual version the user has installed in their `package.json` or `node_modules`. The 0.8.x line introduced multi-bet support (`bet_index`) — pre-0.8 codebases follow different secret-persistence and claim signatures. **0.8.5** fixes the position-decode bug where `useUserPositions` silently returned `[]` whenever the wallet had any pre-`bet_index` (208-byte) accounts alongside current (216-byte) ones — pin `>=0.8.5` if you see an empty Positions tab despite on-chain accounts existing. **0.8.6** (breaking for raw-ix callers only): `placePrivateBet*Ix` dropped the `betIndex` arg in favor of a new on-chain `user_state` PDA that auto-increments. The SDK adds the `user_state` account and reads `next_bet_index` automatically; raw-ix callers must include it. `placeBetAction` / `usePlaceBet` callers are unaffected.
+> **Targets `@cypher-zk/sdk@0.8.9`**. Always verify the actual version the user has installed in their `package.json` or `node_modules`. The 0.8.x line introduced multi-bet support (`bet_index`) — pre-0.8 codebases follow different secret-persistence and claim signatures. **0.8.5** fixes the position-decode bug where `useUserPositions` silently returned `[]` whenever the wallet had any pre-`bet_index` (208-byte) accounts alongside current (216-byte) ones — pin `>=0.8.5` if you see an empty Positions tab despite on-chain accounts existing. **0.8.6** (breaking for raw-ix callers only): `placePrivateBet*Ix` dropped the `betIndex` arg in favor of a new on-chain `user_state` PDA that auto-increments. The SDK adds the `user_state` account and reads `next_bet_index` automatically; raw-ix callers must include it. `placeBetAction` / `usePlaceBet` callers are unaffected. **0.8.8** added the RPC batching layer: `batchedGetMultipleAccountsInfo`, `CypherClientOptions.rpcOptions`, `client.markets.byIds(ids)`, `client.marketQuestions.fetchMany(markets)`, React `useMarkets({ ids })` filter and `useMarketQuestions(markets)` hook. Pin `>=0.8.8` if the user reports the "input too long" / "Too many account keys" error from `getMultipleAccountsInfo` on `fetchMarketQuestions`. **0.8.9** turned the readonly-wallet sign error into a typed `ReadonlyWalletError` (`code === "READONLY_WALLET"`) so frontends can detect the "wallet still connecting" case in mutation `onError` handlers.
 
 ## Your surface
 
@@ -80,8 +80,9 @@ When acting as an AI assistant using this skill to help a user, follow these str
   decrypt their position later. There is no on-chain recovery path.
 - **NEVER** read `market.question` — `MarketAccount` has no question
   field. Questions live in a separate `MarketQuestion` account. Use
-  `fetchMarketQuestions(client, markets)` for batch fetching or
-  `client.marketQuestions.fetch(pda)` for a single market.
+  `client.marketQuestions.fetchMany(markets)` (0.8.8+, batched + retried)
+  or `client.marketQuestions.fetch(pda)` for a single market. In React,
+  use `useMarketQuestions(markets)`.
 - **NEVER** read event field names as snake_case. The SDK's `parseLogs`
   / `subscribeAll` / `on*` helpers return **camelCase `bigint`** fields
   (`data.payoutAmount`, `data.entryOdds`). If a field is `undefined`,

@@ -8,6 +8,7 @@ times are tuned for Cypher's update cadence:
 | `useGlobalState()` | 30s | Protocol config changes rarely (admin-only) |
 | `useMarket(id)` | 10s | Market state changes on bet/resolve/claim |
 | `useMarkets()` | 10s | Same |
+| `useMarketQuestions(markets)` (0.8.8+) | 60s | Questions are immutable after market creation |
 | `useUserPositions()` | 5s | Positions change on every bet |
 
 Override per call:
@@ -24,13 +25,23 @@ builders (`client.bets.placeYesnoIx`, etc.) you have to invalidate
 manually:
 
 ```ts
-import { marketKeys, positionKeys } from "@cypher-zk/sdk/react";
+import {
+  marketKeys,
+  marketQuestionKeys,
+  positionKeys,
+} from "@cypher-zk/sdk/react";
 
 const qc = useQueryClient();
 
 await sendIx(client, await client.bets.placeYesnoIx({...}));
 await qc.invalidateQueries({ queryKey: marketKeys.one(marketId) });
 await qc.invalidateQueries({ queryKey: positionKeys.byUser(user) });
+
+// 0.8.8+ — invalidate paginated market pages and batched questions:
+await qc.invalidateQueries({ queryKey: marketKeys.byIds(idsPage) });
+await qc.invalidateQueries({
+  queryKey: marketQuestionKeys.byMarkets(marketsPage.map((m) => m.publicKey)),
+});
 ```
 
 ## Optimistic updates

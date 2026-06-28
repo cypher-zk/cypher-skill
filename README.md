@@ -53,7 +53,7 @@ agents tend to hallucinate around:
 
 ## Versioning
 
-This skill targets `@cypher-zk/sdk@0.8.7`. The skill's `metadata.version`
+This skill targets `@cypher-zk/sdk@0.8.9`. The skill's `metadata.version`
 in `SKILL.md` tracks SDK compatibility. Upgrade the skill alongside any
 SDK minor or major bump that changes public API shape.
 
@@ -68,6 +68,21 @@ legacy (208-byte, pre-`bet_index`) and current (216-byte, post-`bet_index`)
 Anchor's all-or-nothing `.all()` which threw on the first legacy account
 and silently returned `[]`. Wallets that bet across the `bet_index`
 upgrade boundary need `>=0.8.5` to see their full history.
+
+**0.8.8 RPC batching layer**: new `src/rpc/` module chunks bulk reads past
+Solana's 100-key `getMultipleAccountsInfo` cap with bounded concurrency
+and retries. New `CypherClientOptions.rpcOptions` for global tuning, new
+paginated `client.markets.byIds(ids)` (and React `useMarkets({ ids })`),
+new batched `client.marketQuestions.fetchMany(markets)` (and React
+`useMarketQuestions(markets)`). Pin `>=0.8.8` if `fetchMarketQuestions`
+fails once the deployment has more than ~100 markets.
+
+**0.8.9 typed read-only error**: `readonlyWallet` now throws
+`ReadonlyWalletError` (`code === "READONLY_WALLET"`,
+`name === "ReadonlyWalletError"`) instead of a generic `Error`.
+Frontends detect the "wallet still hydrating" case in mutation `onError`
+handlers to show a "connect wallet" prompt instead of leaking the SDK
+detail to the user.
 
 ## Layout
 
